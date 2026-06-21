@@ -41,10 +41,11 @@ Verbatim from spec (`docs/superpowers/specs/2026-06-21-comfyui-node-wiki-design.
 
 ```
 .gitignore
-.env.example
 README.md
 web/
 ├── package.json
+├── .env.example
+├── .env (gitignored)
 ├── tsconfig.json
 ├── next.config.ts
 ├── tailwind.config.ts
@@ -361,20 +362,22 @@ git commit -m "feat(web): scaffold Next.js 15 + TypeScript + Tailwind"
 ## Task 2: Configure Database Connection
 
 **Files:**
-- Create: `.env.example`
-- Create: `.env` (gitignored — local only)
+- Create: `web/.env.example`
+- Create: `web/.env` (gitignored — local only)
 
-**Assumptions:** A MySQL 8 instance is already running and reachable from this machine. You have credentials with `CREATE DATABASE` privilege. The `mysql` client is in `PATH` (used for verification only; Prisma does the actual connections).
+**Assumptions:** A MySQL 5.7+ or 8.0+ instance is already running and reachable from this machine. You have credentials with `CREATE DATABASE` privilege. The `mysql` client is in `PATH` (used for verification only; Prisma does the actual connections).
+
+**Why `web/` and not repo root:** Prisma CLI and Next.js both auto-load `.env` from `web/` (the Next.js project root). Placing the file there means `pnpm prisma migrate dev`, `pnpm prisma:seed`, and `pnpm dev` all pick it up with no manual export. A root `.env` would require exporting `DATABASE_URL` for every Prisma CLI invocation.
 
 **Interfaces:**
 - Produces:
-  - `.env.example` (committed): template of every env var the app reads.
-  - `.env` (gitignored): your local copy with `DATABASE_URL` filled in.
+  - `web/.env.example` (committed): template of every env var the app reads.
+  - `web/.env` (gitignored): your local copy with `DATABASE_URL` filled in.
   - Two databases exist on your MySQL server: `comfyui_nodes` (dev) and `comfyui_nodes_test` (tests), both with `utf8mb4_unicode_ci` collation.
 
-- [ ] **Step 1: Create `.env.example`**
+- [ ] **Step 1: Create `web/.env.example`**
 
-Create `.env.example` at the repo root:
+Create `web/.env.example`:
 
 ```
 DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/comfyui_nodes"
@@ -385,15 +388,15 @@ GITHUB_SECRET="your-github-oauth-app-client-secret"
 BOOTSTRAP_ADMIN_GITHUB_ID="0"
 ```
 
-- [ ] **Step 2: Create `.env` and edit `DATABASE_URL`**
+- [ ] **Step 2: Create `web/.env` and edit `DATABASE_URL`**
 
-Copy the template to `.env`:
+Copy the template to `web/.env`:
 
 ```bash
-cp .env.example .env
+cp web/.env.example web/.env
 ```
 
-Open `.env` in your editor and replace `DATABASE_URL` with your MySQL connection. Example for a local MySQL on the default port with user `comfyui` and password `comfyuipw`:
+Open `web/.env` in your editor and replace `DATABASE_URL` with your MySQL connection. Example for a local MySQL on the default port with user `comfyui` and password `comfyuipw`:
 
 ```
 DATABASE_URL="mysql://comfyui:comfyuipw@127.0.0.1:3306/comfyui_nodes"
@@ -407,11 +410,11 @@ Run:
 ```bash
 mysql -h 127.0.0.1 -u comfyui -pcomfyuipw -e "SELECT VERSION();"
 ```
-(Substitute your actual host/user/password.) Expected: prints a MySQL 8.x version string and exits 0.
+(Substitute your actual host/user/password.) Expected: prints a MySQL 5.7+ / 8.x version string and exits 0.
 
 - [ ] **Step 4: Create the dev and test databases**
 
-Run (substitute credentials to match your `.env`):
+Run (substitute credentials to match your `web/.env`):
 ```bash
 mysql -h 127.0.0.1 -u comfyui -pcomfyuipw -e "CREATE DATABASE IF NOT EXISTS comfyui_nodes CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE DATABASE IF NOT EXISTS comfyui_nodes_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```
@@ -422,8 +425,8 @@ If you prefer a GUI: connect with MySQL Workbench / DBeaver / Navicat and run th
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .env.example
-git commit -m "chore: add .env.example template for DATABASE_URL and OAuth"
+git add web/.env.example
+git commit -m "chore: add web/.env.example template for DATABASE_URL and OAuth"
 ```
 
 ---
@@ -676,7 +679,7 @@ async function main() {
         },
         {
           tag: 'v8.9',
-          sha: 'b2c3d4e5f6071829a3b4c5d6e7f809123456789a',
+          sha: 'b2c3d4e5f6071829a3b4c5d6e7f8091234567890',
           release: '2025-11-02T00:00:00Z',
           raw: {
             python_min: '3.10',
@@ -699,7 +702,7 @@ async function main() {
       versions: [
         {
           tag: 'v1.2.0',
-          sha: 'c3d4e5f60718293a4b5c6d7e8f90123456789abcd',
+          sha: 'c3d4e5f60718293a4b5c6d7e8f90123456789abc',
           release: '2026-02-20T00:00:00Z',
           raw: {
             python_min: '3.9',
@@ -723,7 +726,7 @@ async function main() {
       versions: [
         {
           tag: 'v1.0.3',
-          sha: 'd4e5f6071829a3b4c5d6e7f809123456789abcdef',
+          sha: 'd4e5f6071829a3b4c5d6e7f80912345678abcdef',
           release: '2026-03-05T00:00:00Z',
           raw: {
             python_min: '3.10',
@@ -2724,8 +2727,8 @@ git commit -m "feat(web): version detail page with full published view"
 cd web && pnpm install
 
 # 2. 复制环境变量并填入你的 MySQL 连接信息
-cp .env.example ../.env
-# 编辑 ../.env，把 DATABASE_URL 改为 mysql://USER:PASSWORD@HOST:3306/comfyui_nodes
+cp web/.env.example web/.env
+# 编辑 web/.env，把 DATABASE_URL 改为 mysql://USER:PASSWORD@HOST:3306/comfyui_nodes
 
 # 3. 创建数据库（仅首次需要）
 mysql -h HOST -u USER -pPASSWORD -e \
@@ -2758,7 +2761,7 @@ pnpm test:watch    # 开发期间监听模式
 
 ```
 .
-├── .env.example                # 环境变量样例（DATABASE_URL、GitHub OAuth）
+├── .env.example                # 环境变量样例（DATABASE_URL、GitHub OAuth）→ 实际位于 web/.env.example
 ├── docs/superpowers/
 │   ├── specs/                  # 设计规格
 │   └── plans/                  # 实现计划（本文件所在目录）
