@@ -4,12 +4,12 @@
 
 **Goal:** Bootstrap a working public ComfyUI node wiki: Next.js 15 monolith with Prisma/MySQL, GitHub OAuth login, seeded example data, public read-only pages and `/api/v1/...` read endpoints.
 
-**Architecture:** Next.js 15 App Router (TypeScript strict) is the only runtime in this plan. Prisma 5 talks to MySQL 8 (via docker-compose). NextAuth.js v5 (Auth.js) provides GitHub OAuth. All public pages are React Server Components with `revalidate` caching. The "published" view of a node version is the merge of `node_raw_requirements` and the latest approved `wiki_revisions` (in Plan 1 there are no wiki revisions yet, so published == raw).
+**Architecture:** Next.js 15 App Router (TypeScript strict) is the only runtime in this plan. Prisma 5 talks to a user-supplied MySQL 8 instance via `DATABASE_URL`. NextAuth.js v5 (Auth.js) provides GitHub OAuth. All public pages are React Server Components with `revalidate` caching. The "published" view of a node version is the merge of `node_raw_requirements` and the latest approved `wiki_revisions` (in Plan 1 there are no wiki revisions yet, so published == raw).
 
 **Tech Stack:**
 - Node.js 20 LTS, pnpm 9
 - Next.js 15.x, React 19, TypeScript 5.x (strict)
-- Prisma 5.x + MySQL 8.0
+- Prisma 5.x + MySQL 8.0 (user-supplied, connection via `DATABASE_URL`)
 - NextAuth.js v5 (Auth.js) — GitHub OAuth provider
 - Zod 3.x (API input validation)
 - Tailwind CSS 3.x (styling)
@@ -42,7 +42,6 @@ Verbatim from spec (`docs/superpowers/specs/2026-06-21-comfyui-node-wiki-design.
 ```
 .gitignore
 .env.example
-docker-compose.yml
 README.md
 web/
 ├── package.json
@@ -359,58 +358,26 @@ git commit -m "feat(web): scaffold Next.js 15 + TypeScript + Tailwind"
 
 ---
 
-## Task 2: docker-compose for MySQL 8.0 + Redis 7
+## Task 2: Configure Database Connection
 
 **Files:**
-- Create: `docker-compose.yml`
 - Create: `.env.example`
+- Create: `.env` (gitignored — local only)
+
+**Assumptions:** A MySQL 8 instance is already running and reachable from this machine. You have credentials with `CREATE DATABASE` privilege. The `mysql` client is in `PATH` (used for verification only; Prisma does the actual connections).
 
 **Interfaces:**
-- Produces: `docker compose up -d mysql redis` brings up MySQL 8 on port 3306 and Redis 7 on port 6379, with credentials matching `.env.example`.
+- Produces:
+  - `.env.example` (committed): template of every env var the app reads.
+  - `.env` (gitignored): your local copy with `DATABASE_URL` filled in.
+  - Two databases exist on your MySQL server: `comfyui_nodes` (dev) and `comfyui_nodes_test` (tests), both with `utf8mb4_0900_ai_ci` collation.
 
-- [ ] **Step 1: Create `docker-compose.yml`**
+- [ ] **Step 1: Create `.env.example`**
 
-```yaml
-services:
-  mysql:
-    image: mysql:8.0
-    container_name: comfyui-wiki-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpw
-      MYSQL_DATABASE: comfyui_nodes
-      MYSQL_USER: comfyui
-      MYSQL_PASSWORD: comfyuipw
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpw"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
-  redis:
-    image: redis:7-alpine
-    container_name: comfyui-wiki-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-volumes:
-  mysql_data:
-```
-
-- [ ] **Step 2: Create `.env.example`**
+Create `.env.example` at the repo root:
 
 ```
-DATABASE_URL="mysql://comfyui:comfyuipw@localhost:3306/comfyui_nodes"
+DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/comfyui_nodes"
 NEXTAUTH_SECRET="dev-secret-replace-in-production-with-openssl-rand-base64-32"
 NEXTAUTH_URL="http://localhost:3000"
 GITHUB_CLIENT_ID="your-github-oauth-app-client-id"
@@ -418,32 +385,45 @@ GITHUB_SECRET="your-github-oauth-app-client-secret"
 BOOTSTRAP_ADMIN_GITHUB_ID="0"
 ```
 
-- [ ] **Step 3: Bring up MySQL + Redis**
+- [ ] **Step 2: Create `.env` and edit `DATABASE_URL`**
 
-Run:
+Copy the template to `.env`:
+
 ```bash
 cp .env.example .env
-docker compose up -d mysql redis
 ```
-Expected: both containers reach `healthy` status within 30 s. Verify:
-```bash
-docker compose ps
-```
-Both services should show `State: Up (healthy)`.
 
-- [ ] **Step 4: Verify MySQL connectivity**
+Open `.env` in your editor and replace `DATABASE_URL` with your MySQL connection. Example for a local MySQL on the default port with user `comfyui` and password `comfyuipw`:
+
+```
+DATABASE_URL="mysql://comfyui:comfyuipw@127.0.0.1:3306/comfyui_nodes"
+```
+
+The OAuth placeholders (`GITHUB_CLIENT_ID`, `GITHUB_SECRET`, `BOOTSTRAP_ADMIN_GITHUB_ID`) stay as-is for now — Task 5 wires them up.
+
+- [ ] **Step 3: Verify MySQL connectivity**
 
 Run:
 ```bash
-docker compose exec mysql mysqladmin ping -h localhost -uroot -prootpw
+mysql -h 127.0.0.1 -u comfyui -pcomfyuipw -e "SELECT VERSION();"
 ```
-Expected: `mysqld is alive`.
+(Substitute your actual host/user/password.) Expected: prints a MySQL 8.x version string and exits 0.
+
+- [ ] **Step 4: Create the dev and test databases**
+
+Run (substitute credentials to match your `.env`):
+```bash
+mysql -h 127.0.0.1 -u comfyui -pcomfyuipw -e "CREATE DATABASE IF NOT EXISTS comfyui_nodes CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; CREATE DATABASE IF NOT EXISTS comfyui_nodes_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+```
+Expected: no output, exit 0.
+
+If you prefer a GUI: connect with MySQL Workbench / DBeaver / Navicat and run the same two `CREATE DATABASE` statements.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docker-compose.yml .env.example
-git commit -m "chore: add docker-compose for MySQL 8 + Redis 7"
+git add .env.example
+git commit -m "chore: add .env.example template for DATABASE_URL and OAuth"
 ```
 
 ---
@@ -1339,23 +1319,17 @@ GITHUB_SECRET="test"
 BOOTSTRAP_ADMIN_GITHUB_ID="0"
 ```
 
-- [ ] **Step 2: Create test database**
+- [ ] **Step 2: Push schema to test DB**
 
 Run:
 ```bash
-docker compose exec mysql mysql -uroot -prootpw -e "CREATE DATABASE IF NOT EXISTS comfyui_nodes_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+cd web && DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/comfyui_nodes_test" pnpm exec prisma db push
 ```
-Expected: command exits 0, no output.
+Substitute `USER:PASSWORD@HOST` with the same values used in `.env`. Expected: `Your database is now in sync with your Prisma schema.`
 
-- [ ] **Step 3: Push schema to test DB**
+(If Task 2 already created the `comfyui_nodes_test` database, this step only needs to run once. Re-run only if the schema changes during this plan.)
 
-Run:
-```bash
-cd web && DATABASE_URL="mysql://comfyui:comfyuipw@localhost:3306/comfyui_nodes_test" pnpm exec prisma db push
-```
-Expected: `Your database is now in sync with your Prisma schema.`
-
-- [ ] **Step 4: Create `web/tests/setup.ts`**
+- [ ] **Step 3: Create `web/tests/setup.ts`**
 
 ```ts
 import { execSync } from 'node:child_process';
@@ -1390,7 +1364,7 @@ export async function setup(): Promise<void> {
 }
 ```
 
-- [ ] **Step 5: Create `web/tests/fixtures.ts`**
+- [ ] **Step 4: Create `web/tests/fixtures.ts`**
 
 ```ts
 import { PrismaClient } from '@prisma/client';
@@ -1453,7 +1427,7 @@ export async function seedFixture(prisma: PrismaClient): Promise<void> {
 }
 ```
 
-- [ ] **Step 6: Wire setup into Vitest config**
+- [ ] **Step 5: Wire setup into Vitest config**
 
 Replace `web/vitest.config.ts`:
 
@@ -1476,7 +1450,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 7: Run vitest with no tests to verify setup**
+- [ ] **Step 6: Run vitest with no tests to verify setup**
 
 Run:
 ```bash
@@ -1484,7 +1458,7 @@ cd web && pnpm test
 ```
 Expected: `No test files found` (or 0 tests collected) — the globalSetup runs and exits cleanly. The migration command may print output; that's fine.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add web/tests/setup.ts web/tests/fixtures.ts web/.env.test web/vitest.config.ts
@@ -2740,7 +2714,8 @@ git commit -m "feat(web): version detail page with full published view"
 
 - Node.js 20 LTS
 - pnpm 9
-- Docker + Docker Compose
+- 一个可连接的 MySQL 8.0 实例（本地安装或远程均可，需具备 `CREATE DATABASE` 权限）
+- `mysql` 命令行客户端（仅用于一次性创建数据库，可选用 Workbench / DBeaver 等 GUI 替代）
 
 ## 首次启动
 
@@ -2748,16 +2723,17 @@ git commit -m "feat(web): version detail page with full published view"
 # 1. 安装依赖
 cd web && pnpm install
 
-# 2. 复制环境变量
-cp .env.example ../.env       # Linux/macOS
-# Windows (Git Bash):
-cp ../.env.example ../.env
+# 2. 复制环境变量并填入你的 MySQL 连接信息
+cp .env.example ../.env
+# 编辑 ../.env，把 DATABASE_URL 改为 mysql://USER:PASSWORD@HOST:3306/comfyui_nodes
 
-# 3. 启动 MySQL + Redis
-docker compose up -d mysql redis
+# 3. 创建数据库（仅首次需要）
+mysql -h HOST -u USER -pPASSWORD -e \
+  "CREATE DATABASE IF NOT EXISTS comfyui_nodes CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+   CREATE DATABASE IF NOT EXISTS comfyui_nodes_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
 
-# 4. 应用数据库迁移
-pnpm prisma migrate dev
+# 4. 应用数据库迁移（开发库）
+cd web && pnpm prisma migrate dev
 
 # 5. 灌入示例数据（3 个节点 / 4 个版本）
 pnpm prisma:seed
@@ -2782,8 +2758,7 @@ pnpm test:watch    # 开发期间监听模式
 
 ```
 .
-├── docker-compose.yml          # 本地 MySQL 8 + Redis 7
-├── .env.example                # 环境变量样例
+├── .env.example                # 环境变量样例（DATABASE_URL、GitHub OAuth）
 ├── docs/superpowers/
 │   ├── specs/                  # 设计规格
 │   └── plans/                  # 实现计划（本文件所在目录）
