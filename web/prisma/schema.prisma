@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum NodeStatus {
+  active
+  deprecated
+  hidden
+}
+
+enum RevisionStatus {
+  pending
+  approved
+  rejected
+}
+
+enum SubmissionStatus {
+  pending
+  approved
+  rejected
+}
+
+model User {
+  id           BigInt   @id @default(autoincrement())
+  github_id    BigInt   @unique
+  username     String   @db.VarChar(64)
+  email        String?  @db.VarChar(255)
+  avatar_url   String   @db.VarChar(512)
+  role         UserRole @default(user)
+  created_at   DateTime @default(now())
+
+  authored_revisions WikiRevision[] @relation("RevisionAuthor")
+  reviewed_revisions WikiRevision[] @relation("RevisionReviewer")
+  submissions        NodeSubmission[] @relation("SubmissionSubmitter")
+  reviewed_submissions NodeSubmission[] @relation("SubmissionReviewer")
+
+  @@map("users")
+}
+
+model Node {
+  id            BigInt     @id @default(autoincrement())
+  github_owner  String     @db.VarChar(128)
+  github_repo   String     @db.VarChar(128)
+  name          String     @db.VarChar(255)
+  author        String     @db.VarChar(128)
+  description   String?    @db.Text
+  status        NodeStatus @default(active)
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+
+  versions NodeVersion[]
+
+  @@unique([github_owner, github_repo])
+  @@index([status, updated_at])
+  @@map("nodes")
+}
+
+model NodeVersion {
+  id           BigInt   @id @default(autoincrement())
+  node_id      BigInt
+  version_tag  String   @db.VarChar(64)
+  git_sha      String   @db.Char(40)
+  release_date DateTime
+  scanned_at   DateTime @default(now())
+
+  node             Node                  @relation(fields: [node_id], references: [id], onDelete: Cascade)
+  raw_requirements NodeRawRequirement?
+  wiki_revisions   WikiRevision[]
+
+  @@unique([node_id, version_tag])
+  @@index([node_id, release_date])
+  @@map("node_versions")
+}
+
+model NodeRawRequirement {
+  version_id          BigInt  @id
+  python_min          String? @db.VarChar(16)
+  python_max          String? @db.VarChar(16)
+  dependencies        Json
+  node_class_mappings Json
+  incompatibilities   Json
+  scan_warnings       Json
+  raw_files           Json
+
+  version NodeVersion @relation(fields: [version_id], references: [id], onDelete: Cascade)
+
+  @@map("node_raw_requirements")
+}
+
+model WikiRevision {
+  id                  BigInt         @id @default(autoincrement())
+  version_id          BigInt
+  author_id           BigInt
+  python_min          String?        @db.VarChar(16)
+  python_max          String?        @db.VarChar(16)
+  dependencies        Json
+  node_class_mappings Json
+  incompatibilities   Json
+  notes_md            String         @db.MediumText
+  edit_summary        String         @db.VarChar(500)
+  status              RevisionStatus @default(pending)
+  reviewer_id         BigInt?
+  review_note         String?        @db.Text
+  reviewed_at         DateTime?
+  created_at          DateTime       @default(now())
+
+  version  NodeVersion @relation(fields: [version_id], references: [id], onDelete: Cascade)
+  author   User        @relation("RevisionAuthor", fields: [author_id], references: [id])
+  reviewer User?       @relation("RevisionReviewer", fields: [reviewer_id], references: [id])
+
+  @@index([version_id, status, created_at(sort: Desc)])
+  @@map("wiki_revisions")
+}
+
+model NodeSubmission {
+  id            BigInt           @id @default(autoincrement())
+  submitter_id  BigInt
+  github_url    String           @db.VarChar(512)
+  status        SubmissionStatus @default(pending)
+  reviewer_id   BigInt?
+  review_note   String?          @db.Text
+  created_at    DateTime         @default(now())
+  reviewed_at   DateTime?
+
+  submitter User  @relation("SubmissionSubmitter", fields: [submitter_id], references: [id])
+  reviewer  User? @relation("SubmissionReviewer", fields: [reviewer_id], references: [id])
+
+  @@index([status, created_at])
+  @@map("node_submissions")
+}
