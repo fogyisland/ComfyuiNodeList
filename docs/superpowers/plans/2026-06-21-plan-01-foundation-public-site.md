@@ -9,7 +9,7 @@
 **Tech Stack:**
 - Node.js 20 LTS, pnpm 9
 - Next.js 15.x, React 19, TypeScript 5.x (strict)
-- Prisma 5.x + MySQL 8.0 (user-supplied, connection via `DATABASE_URL`)
+- Prisma 5.x + MySQL 5.7+ / 8.0+ (user-supplied, connection via `DATABASE_URL`)
 - NextAuth.js v5 (Auth.js) — GitHub OAuth provider
 - Zod 3.x (API input validation)
 - Tailwind CSS 3.x (styling)
@@ -19,7 +19,7 @@
 
 Verbatim from spec (`docs/superpowers/specs/2026-06-21-comfyui-node-wiki-design.md`):
 
-- MySQL 8.0, default collation `utf8mb4_0900_ai_ci`. Database name `comfyui_nodes` in dev, `comfyui_nodes_test` in tests.
+- MySQL 5.7+ or 8.0+, default collation `utf8mb4_unicode_ci` (portable across both major versions; `utf8mb4_0900_ai_ci` is 8.0-only). Database name `comfyui_nodes` in dev, `comfyui_nodes_test` in tests.
 - All API responses: JSON, UTF-8, ISO-8601 timestamps.
 - Public API base path: `/api/v1/...`. Never expose `scan_warnings`, `raw_files`, internal IDs, or `wiki_revisions` rows in public responses.
 - Tables defined in this plan (per spec §4): `users`, `nodes`, `node_versions`, `node_raw_requirements`, `wiki_revisions`, `node_submissions`.
@@ -370,7 +370,7 @@ git commit -m "feat(web): scaffold Next.js 15 + TypeScript + Tailwind"
 - Produces:
   - `.env.example` (committed): template of every env var the app reads.
   - `.env` (gitignored): your local copy with `DATABASE_URL` filled in.
-  - Two databases exist on your MySQL server: `comfyui_nodes` (dev) and `comfyui_nodes_test` (tests), both with `utf8mb4_0900_ai_ci` collation.
+  - Two databases exist on your MySQL server: `comfyui_nodes` (dev) and `comfyui_nodes_test` (tests), both with `utf8mb4_unicode_ci` collation.
 
 - [ ] **Step 1: Create `.env.example`**
 
@@ -413,7 +413,7 @@ mysql -h 127.0.0.1 -u comfyui -pcomfyuipw -e "SELECT VERSION();"
 
 Run (substitute credentials to match your `.env`):
 ```bash
-mysql -h 127.0.0.1 -u comfyui -pcomfyuipw -e "CREATE DATABASE IF NOT EXISTS comfyui_nodes CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; CREATE DATABASE IF NOT EXISTS comfyui_nodes_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+mysql -h 127.0.0.1 -u comfyui -pcomfyuipw -e "CREATE DATABASE IF NOT EXISTS comfyui_nodes CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE DATABASE IF NOT EXISTS comfyui_nodes_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```
 Expected: no output, exit 0.
 
@@ -2714,7 +2714,7 @@ git commit -m "feat(web): version detail page with full published view"
 
 - Node.js 20 LTS
 - pnpm 9
-- 一个可连接的 MySQL 8.0 实例（本地安装或远程均可，需具备 `CREATE DATABASE` 权限）
+- 一个可连接的 MySQL 5.7+ / 8.0+ 实例（本地安装或远程均可，需具备 `CREATE DATABASE` 权限）
 - `mysql` 命令行客户端（仅用于一次性创建数据库，可选用 Workbench / DBeaver 等 GUI 替代）
 
 ## 首次启动
@@ -2729,8 +2729,8 @@ cp .env.example ../.env
 
 # 3. 创建数据库（仅首次需要）
 mysql -h HOST -u USER -pPASSWORD -e \
-  "CREATE DATABASE IF NOT EXISTS comfyui_nodes CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-   CREATE DATABASE IF NOT EXISTS comfyui_nodes_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+  "CREATE DATABASE IF NOT EXISTS comfyui_nodes CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   CREATE DATABASE IF NOT EXISTS comfyui_nodes_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 # 4. 应用数据库迁移（开发库）
 cd web && pnpm prisma migrate dev
