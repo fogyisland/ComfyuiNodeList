@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { Header } from './(public)/_components/Header';
 
 export const metadata: Metadata = {
   title: 'ComfyUI Node Wiki',
@@ -11,6 +12,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="zh">
       <body className="min-h-screen bg-gray-50 text-gray-900">
+        <Header />
         {children}
       </body>
     </html>
