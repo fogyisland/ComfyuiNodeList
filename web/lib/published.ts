@@ -49,11 +49,11 @@ export async function getPublishedRequirements(
       [],
     node_class_mappings:
       (approved?.node_class_mappings as string[] | null) ??
-      raw?.node_class_mappings ??
+      (raw?.node_class_mappings as string[] | null) ??
       [],
     incompatibilities:
       (approved?.incompatibilities as string[] | null) ??
-      raw?.incompatibilities ??
+      (raw?.incompatibilities as string[] | null) ??
       [],
   };
 }
