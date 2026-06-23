@@ -28,7 +28,7 @@ describe('getPublishedRequirements', () => {
         incompatibilities: [],
       },
     });
-    const r = await getPublishedRequirements(version.id);
+    const r = await getPublishedRequirements(Number(version.id));
     expect(r.python_min).toBe('3.10');
     expect(r.dependencies).toHaveLength(1);
     expect(r.dependencies[0]?.name).toBe('torch');
@@ -53,7 +53,7 @@ describe('getPublishedRequirements', () => {
         reviewed_at: new Date('2026-04-01T00:00:00Z'),
       },
     });
-    const r = await getPublishedRequirements(version.id);
+    const r = await getPublishedRequirements(Number(version.id));
     expect(r.python_min).toBe('3.11');
     expect(r.dependencies).toHaveLength(0);
     expect(r.node_class_mappings).toEqual(['SAMLoader', 'BarNode']);
@@ -91,7 +91,7 @@ describe('getPublishedRequirements', () => {
         reviewed_at: new Date('2026-04-01T00:00:00Z'),
       },
     });
-    const r = await getPublishedRequirements(version.id);
+    const r = await getPublishedRequirements(Number(version.id));
     expect(r.python_min).toBe('3.10'); // raw default
   });
 
@@ -99,7 +99,7 @@ describe('getPublishedRequirements', () => {
     const version = await prisma.nodeVersion.findFirstOrThrow({ where: { version_tag: 'v8.9' } });
     // delete raw row to simulate un-scanned version
     await prisma.nodeRawRequirement.delete({ where: { version_id: version.id } });
-    const r = await getPublishedRequirements(version.id);
+    const r = await getPublishedRequirements(Number(version.id));
     expect(r.python_min).toBeNull();
     expect(r.python_max).toBeNull();
     expect(r.dependencies).toEqual([]);

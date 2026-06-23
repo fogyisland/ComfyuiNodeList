@@ -38,7 +38,7 @@ export async function getPublishedRequirements(
   const approved = version.wiki_revisions[0];
 
   return {
-    version_id: version.id,
+    version_id: Number(version.id),
     version_tag: version.version_tag,
     release_date: version.release_date,
     python_min: approved?.python_min ?? raw?.python_min ?? null,
