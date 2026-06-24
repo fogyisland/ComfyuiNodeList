@@ -36,7 +36,7 @@ pnpm prisma:seed
 pnpm dev
 ```
 
-打开 http://localhost:3000 应能看到首页（含 3 个种子节点）。
+打开 http://localhost:9999 应能看到首页（含 3 个种子节点）。
 
 ## 测试
 
