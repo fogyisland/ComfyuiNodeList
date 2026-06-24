@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { NodeStatus } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { NodeCard } from './(public)/_components/NodeCard';
 
@@ -6,10 +7,10 @@ export const revalidate = 60;
 
 export default async function HomePage() {
   const [nodeCount, versionCount, recent] = await Promise.all([
-    prisma.node.count({ where: { status: { in: ['active', 'deprecated'] } } }),
+    prisma.node.count({ where: { status: { in: [NodeStatus.active, NodeStatus.deprecated] } } }),
     prisma.nodeVersion.count(),
     prisma.node.findMany({
-      where: { status: { in: ['active', 'deprecated'] } },
+      where: { status: { in: [NodeStatus.active, NodeStatus.deprecated] } },
       orderBy: { updated_at: 'desc' },
       take: 5,
       select: { github_owner: true, github_repo: true, name: true, author: true, description: true, updated_at: true },

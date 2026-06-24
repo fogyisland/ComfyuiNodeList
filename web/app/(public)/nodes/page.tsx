@@ -78,7 +78,7 @@ export default async function NodesListPage({
       )}
 
       <div className="mt-6">
-        <Pagination page={page} pageSize={pageSize} total={total} basePath="/nodes" />
+        <Pagination page={page} pageSize={pageSize} total={total} basePath="/nodes" extraQuery={{ q: q || undefined }} />
       </div>
     </main>
   );
