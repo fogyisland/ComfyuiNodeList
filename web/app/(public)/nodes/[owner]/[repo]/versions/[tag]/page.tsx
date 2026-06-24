@@ -20,11 +20,18 @@ export default async function VersionDetailPage({
   });
   if (!version) notFound();
 
-  const pub = await getPublishedRequirements(Number(version.id));
-  const node = await prisma.node.findUniqueOrThrow({
-    where: { id: version.node_id },
-    select: { name: true },
-  });
+  const [pub, node, latestApproved] = await Promise.all([
+    getPublishedRequirements(Number(version.id)),
+    prisma.node.findUniqueOrThrow({
+      where: { id: version.node_id },
+      select: { name: true },
+    }),
+    prisma.wikiRevision.findFirst({
+      where: { version_id: version.id, status: 'approved' },
+      orderBy: { reviewed_at: 'desc' },
+      select: { notes_md: true },
+    }),
+  ]);
 
   return (
     <main className="mx-auto max-w-4xl p-8">
@@ -69,6 +76,15 @@ export default async function VersionDetailPage({
           </ul>
         )}
       </section>
+
+      {latestApproved?.notes_md && (
+        <section className="mt-6 rounded border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-gray-700">备注</h2>
+          <pre className="mt-2 whitespace-pre-wrap text-sm text-gray-700 font-mono">
+            {latestApproved.notes_md}
+          </pre>
+        </section>
+      )}
 
       {pub.dependencies.length === 0 && pub.node_class_mappings.length === 0 && (
         <p className="mt-6 text-xs text-gray-400">
