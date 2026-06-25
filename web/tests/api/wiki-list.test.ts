@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PrismaClient, RevisionStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { NextRequest } from 'next/server';
 
 const authMock = vi.hoisted(() => vi.fn());

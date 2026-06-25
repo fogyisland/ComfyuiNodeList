@@ -1,13 +1,16 @@
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { getCurrentUser } from '@/lib/session';
+import { requireUser } from '@/lib/session';
 import { getPublishedRequirements } from '@/lib/published';
 import { json, error } from '@/lib/api-helpers';
 
 type Ctx = { params: Promise<{ versionId: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
-  const user = await getCurrentUser();
+  const user = await requireUser().catch((e: Error) => {
+    if (e.message === 'UNAUTHENTICATED') return null;
+    throw e;
+  });
   if (!user) return error(401, 'unauthenticated');
   const { versionId: versionIdStr } = await ctx.params;
   const versionId = Number(versionIdStr);
