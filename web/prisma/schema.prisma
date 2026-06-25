@@ -22,6 +22,8 @@ enum RevisionStatus {
   pending
   approved
   rejected
+  archived
+  withdrawn
 }
 
 enum SubmissionStatus {
