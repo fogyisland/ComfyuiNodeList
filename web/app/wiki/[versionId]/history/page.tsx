@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { requireUser } from '@/lib/session';
 import { HistoryClient } from './HistoryClient';
@@ -6,8 +6,12 @@ import { HistoryClient } from './HistoryClient';
 type Props = { params: Promise<{ versionId: string }> };
 
 export default async function HistoryPage({ params }: Props) {
-  await requireUser();
   const { versionId } = await params;
+  try {
+    await requireUser();
+  } catch {
+    redirect(`/login?callbackUrl=/wiki/${versionId}/history`);
+  }
   const id = Number(versionId);
   if (!Number.isInteger(id) || id < 1) notFound();
   const rows = await prisma.wikiRevision.findMany({
