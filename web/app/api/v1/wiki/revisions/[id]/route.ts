@@ -25,18 +25,22 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   return json({
     id: Number(r.id),
     versionId: Number(r.version_id),
-    author: { username: r.author.username, avatarUrl: r.author.avatar_url },
-    pythonMin: r.python_min,
-    pythonMax: r.python_max,
-    dependencies: r.dependencies,
-    nodeClassMappings: r.node_class_mappings,
-    incompatibilities: r.incompatibilities,
-    notesMd: r.notes_md,
-    editSummary: r.edit_summary,
     status: r.status,
-    reviewer: r.reviewer ? { username: r.reviewer.username, avatarUrl: r.reviewer.avatar_url } : null,
+    author: { username: r.author.username, avatarUrl: r.author.avatar_url },
+    reviewer: r.reviewer
+      ? { username: r.reviewer.username, avatarUrl: r.reviewer.avatar_url }
+      : null,
+    fields: {
+      python_min: r.python_min,
+      python_max: r.python_max,
+      dependencies: r.dependencies,
+      node_class_mappings: r.node_class_mappings,
+      incompatibilities: r.incompatibilities,
+      notes_md: r.notes_md,
+    },
+    editSummary: r.edit_summary,
     reviewNote: r.review_note,
-    reviewedAt: r.reviewed_at ? r.reviewed_at.toISOString() : null,
     createdAt: r.created_at.toISOString(),
+    reviewedAt: r.reviewed_at ? r.reviewed_at.toISOString() : null,
   });
 }
