@@ -253,3 +253,10 @@ def test_build_chain_returns_signature_for_one_node(db_eager, httpx_mock):
             rr_count = cur.fetchone()["COUNT(*)"]
     assert v_count == 1
     assert rr_count == 1
+
+
+def test_beat_schedule_contains_weekly_scan():
+    schedule = celery_app.conf.beat_schedule
+    assert "scan-every-week" in schedule
+    entry = schedule["scan-every-week"]
+    assert entry["task"] == "scanner.tasks.fetch_pending_nodes"

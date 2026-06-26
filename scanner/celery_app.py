@@ -1,6 +1,7 @@
 import os
 
 from celery import Celery
+from celery.schedules import crontab
 
 celery_app = Celery("scanner")
 
@@ -20,3 +21,12 @@ if os.environ.get("CELERY_TEST_EAGER") == "1":
 
 # Auto-discover tasks
 celery_app.autodiscover_tasks(["scanner.tasks"])
+
+# Beat schedule: weekly scan every Monday 03:00 UTC (per spec §7.2)
+celery_app.conf.beat_schedule = {
+    "scan-every-week": {
+        "task": "scanner.tasks.fetch_pending_nodes",
+        "schedule": crontab(hour=3, minute=0, day_of_week="monday"),
+    },
+}
+celery_app.conf.timezone = "UTC"
