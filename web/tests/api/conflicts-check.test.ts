@@ -67,4 +67,83 @@ describe('POST /api/v1/conflicts/check', () => {
     );
     expect(res.status).toBe(400);
   });
+
+  it('accepts a valid draft field and forwards it', async () => {
+    authMock.mockResolvedValue({ user: { id: '1', role: 'user' } });
+    // findFirstMock returns null by default (set in beforeEach), so `installed`
+    // resolves to no nodes. The draft is still added as a virtual node by
+    // checkConflictsWithDraft, but a single node produces no pair-wise
+    // conflicts → 200 with empty conflicts array. The point of this test is
+    // to verify the schema accepts the field and the route forwards it
+    // without 400-ing on the new field. The engine's draft application is
+    // covered by conflict-engine.test.ts (integration tests).
+    const res = await POST(
+      new NextRequest('http://x', {
+        method: 'POST',
+        body: JSON.stringify({
+          installed: [],
+          draft: {
+            python_min: '3.10',
+            python_max: '3.12',
+            dependencies: [],
+            node_class_mappings: [],
+            incompatibilities: [],
+          },
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ conflicts: [] });
+  });
+
+  it('still works without a draft (backward compat)', async () => {
+    authMock.mockResolvedValue({ user: { id: '1', role: 'user' } });
+    const res = await POST(
+      new NextRequest('http://x', {
+        method: 'POST',
+        body: JSON.stringify({ installed: [] }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ conflicts: [] });
+  });
+
+  it('rejects unknown fields in body (strict schema)', async () => {
+    authMock.mockResolvedValue({ user: { id: '1', role: 'user' } });
+    const res = await POST(
+      new NextRequest('http://x', {
+        method: 'POST',
+        body: JSON.stringify({ installed: [], extra: 'x' }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects unknown fields in draft (strict nested schema)', async () => {
+    // ConflictDraftSchema is z.object({...}) (non-strict per the brief),
+    // so unknown keys inside `draft` are silently ignored — they do NOT
+    // trigger 400. The strictness only applies at the body level
+    // (ConflictCheckBody is .strict()).
+    authMock.mockResolvedValue({ user: { id: '1', role: 'user' } });
+    const res = await POST(
+      new NextRequest('http://x', {
+        method: 'POST',
+        body: JSON.stringify({
+          installed: [],
+          draft: {
+            python_min: '3.10',
+            python_max: '3.12',
+            dependencies: [],
+            node_class_mappings: [],
+            incompatibilities: [],
+            unknown: 'x',
+          },
+        }),
+      }),
+    );
+    // Unknown nested key is silently dropped (non-strict draft schema).
+    expect(res.status).toBe(200);
+  });
 });

@@ -18,6 +18,6 @@ export async function POST(req: NextRequest) {
   }
   const parsed = ConflictCheckBody.safeParse(raw);
   if (!parsed.success) return error(400, 'validation failed', parsed.error.flatten());
-  const conflicts = await checkConflicts(parsed.data);
+  const conflicts = await checkConflicts({ installed: parsed.data.installed, draft: parsed.data.draft });
   return json({ conflicts });
 }

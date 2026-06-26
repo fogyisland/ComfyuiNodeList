@@ -5,6 +5,7 @@ import type { PublishedDependency } from './published';
 
 export type ConflictCheckRequest = {
   installed: Array<{ owner: string; repo: string; version_tag: string }>;
+  draft?: ConflictDraftData;
 };
 
 export type Conflict =
@@ -31,7 +32,7 @@ export type ConflictDraftData = {
 };
 
 export async function checkConflicts(req: ConflictCheckRequest): Promise<Conflict[]> {
-  return checkConflictsWithDraft(req.installed, (req as { draft?: ConflictDraftData }).draft);
+  return checkConflictsWithDraft(req.installed, req.draft);
 }
 
 export async function checkConflictsWithDraft(

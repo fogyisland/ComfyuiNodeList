@@ -48,6 +48,14 @@ export const ChangeRoleBody = z
   .object({ role: z.enum(['admin', 'user']) })
   .strict();
 
+export const ConflictDraftSchema = z.object({
+  python_min: z.union([pythonVersion, z.null()]).optional(),
+  python_max: z.union([pythonVersion, z.null()]).optional(),
+  dependencies: z.array(PublishedDependencySchema),
+  node_class_mappings: z.array(z.string()),
+  incompatibilities: z.array(z.string()),
+});
+
 export const ConflictCheckBody = z
   .object({
     installed: z.array(
@@ -57,6 +65,7 @@ export const ConflictCheckBody = z
         version_tag: z.string().min(1),
       }),
     ),
+    draft: ConflictDraftSchema.optional(),
   })
   .strict();
 
@@ -67,4 +76,5 @@ export type RejectRevisionBody = z.infer<typeof RejectRevisionBody>;
 export type ApproveSubmissionBody = z.infer<typeof ApproveSubmissionBody>;
 export type RejectSubmissionBody = z.infer<typeof RejectSubmissionBody>;
 export type ChangeRoleBody = z.infer<typeof ChangeRoleBody>;
+export type ConflictDraft = z.infer<typeof ConflictDraftSchema>;
 export type ConflictCheckBody = z.infer<typeof ConflictCheckBody>;
