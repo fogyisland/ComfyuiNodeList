@@ -3,7 +3,7 @@ import os
 import shutil
 import subprocess
 import tarfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from pytest_httpx import httpx_mock
@@ -176,3 +176,80 @@ def test_parse_version_handles_tarball_with_no_known_files(db_eager, httpx_mock)
     assert result is not None
     assert result["dependencies"] == []
     assert result["python_min"] is None
+
+
+from scanner.tasks.cleanup import cleanup
+
+
+def test_cleanup_keeps_5_per_node(db_eager):
+    for owner, repo in [("foo", "bar"), ("baz", "qux")]:
+        node_id = _insert_node(db_eager, owner, repo)
+        for i in range(7):
+            upsert_version(node_id, f"v{i}.0.0", f"{i:040d}", datetime(2026, 1, i + 1, tzinfo=timezone.utc))
+    result = cleanup()
+    assert sum(result.values()) == 4  # 2 nodes × 2 deletions each
+
+
+def test_cleanup_is_noop_when_all_nodes_have_5_or_fewer(db_eager):
+    node_id = _insert_node(db_eager, "foo", "bar")
+    for i in range(3):
+        upsert_version(node_id, f"v{i}.0.0", f"{i:040d}", datetime(2026, 1, i + 1, tzinfo=timezone.utc))
+    result = cleanup()
+    assert result == {}
+
+
+def test_cleanup_does_not_touch_wiki_revisions(db_eager):
+    """Per spec §7.2 Task 4: cleanup must NOT delete wiki_revisions."""
+    from scanner.db import get_connection
+    node_id = _insert_node(db_eager, "foo", "bar")
+    for i in range(7):
+        upsert_version(node_id, f"v{i}.0.0", f"{i:040d}", datetime(2026, 1, i + 1, tzinfo=timezone.utc))
+    # Create a wiki revision on the oldest version (will be deleted)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM node_versions WHERE node_id = %s ORDER BY release_date ASC LIMIT 1", (node_id,))
+            oldest_vid = cur.fetchone()["id"]
+            # Need a user to be the author
+            cur.execute("INSERT INTO users (github_id, username, avatar_url, role) VALUES (1, 'u', '', 'user')")
+            user_id = cur.lastrowid
+            cur.execute(
+                "INSERT INTO wiki_revisions (version_id, author_id, dependencies, node_class_mappings, incompatibilities, notes_md, edit_summary, status) "
+                "VALUES (%s, %s, '[]', '[]', '[]', 'note', 'edit', 'pending')",
+                (oldest_vid, user_id),
+            )
+        conn.commit()
+    cleanup()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM wiki_revisions WHERE version_id = %s", (oldest_vid,))
+            count = cur.fetchone()["COUNT(*)"]
+    assert count == 1  # wiki_revisions are preserved
+
+
+from scanner.tasks.chain import build_chain
+
+
+def test_build_chain_returns_signature_for_one_node(db_eager, httpx_mock):
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/releases?per_page=5",
+        json=[{"tag_name": "v1.0.0", "target_commitish": "a" * 40, "published_at": "2026-06-01T00:00:00Z", "tarball_url": "https://example.com/v1.0.0.tar.gz"}],
+    )
+    tarball = _make_tarball({"pyproject.toml": '[project]\ndependencies = ["a>=1"]\n'})
+    # parse_version_per_node reconstructs the tarball URL from the version_tag,
+    # not the tarball_url returned by GitHub.
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/tarball/v1.0.0",
+        content=tarball,
+    )
+    node_id = _insert_node(db_eager, "foo", "bar")
+    sig = build_chain([{"node_id": node_id, "owner": "foo", "repo": "bar"}])
+    result = sig.apply().get(disable_sync_subtasks=False)
+    # After the chain runs: 1 version inserted, raw_requirements written, cleanup ran
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM node_versions WHERE node_id = %s", (node_id,))
+            v_count = cur.fetchone()["COUNT(*)"]
+            cur.execute("SELECT COUNT(*) FROM node_raw_requirements WHERE version_id IN (SELECT id FROM node_versions WHERE node_id = %s)", (node_id,))
+            rr_count = cur.fetchone()["COUNT(*)"]
+    assert v_count == 1
+    assert rr_count == 1

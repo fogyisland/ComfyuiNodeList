@@ -120,7 +120,8 @@ def record_scan_failure(node_id: int, task_name: str, error_message: str, will_r
 
 def delete_old_versions(node_id: int, keep: int = 5) -> int:
     """Delete versions beyond `keep` (oldest first) for a node. Returns count deleted.
-    `node_raw_requirements` rows are removed via FK CASCADE. `wiki_revisions` are NOT touched."""
+    Versions that have `wiki_revisions` rows referencing them are preserved (per spec §7.2 Task 4:
+    cleanup must NOT delete wiki_revisions). `node_raw_requirements` rows are removed via FK CASCADE."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -132,8 +133,26 @@ def delete_old_versions(node_id: int, keep: int = 5) -> int:
                 return 0
             placeholders = ",".join(["%s"] * len(keep_ids))
             cur.execute(
-                f"DELETE FROM node_versions WHERE node_id = %s AND id NOT IN ({placeholders})",
+                f"SELECT id FROM node_versions WHERE node_id = %s AND id NOT IN ({placeholders})",
                 [node_id, *keep_ids],
+            )
+            candidate_ids = [row["id"] for row in cur.fetchall()]
+            if not candidate_ids:
+                return 0
+            # Exclude versions that have wiki_revisions pointing to them (preserve those).
+            wr_placeholders = ",".join(["%s"] * len(candidate_ids))
+            cur.execute(
+                f"SELECT DISTINCT version_id FROM wiki_revisions WHERE version_id IN ({wr_placeholders})",
+                candidate_ids,
+            )
+            protected_ids = {row["version_id"] for row in cur.fetchall()}
+            deletable_ids = [vid for vid in candidate_ids if vid not in protected_ids]
+            if not deletable_ids:
+                return 0
+            del_placeholders = ",".join(["%s"] * len(deletable_ids))
+            cur.execute(
+                f"DELETE FROM node_versions WHERE id IN ({del_placeholders})",
+                deletable_ids,
             )
             deleted = cur.rowcount
         conn.commit()
