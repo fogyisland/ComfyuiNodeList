@@ -1,6 +1,6 @@
 # ComfyUI Node Wiki
 
-公开的 ComfyUI 节点元数据 Wiki 服务。本仓库目前包含 **Plan 1 + Plan 2** 的实现。
+公开的 ComfyUI 节点元数据 Wiki 服务。本仓库目前包含 **Plan 1 + Plan 2 + Plan 3** 的实现。
 
 完整设计规格：[`docs/superpowers/specs/2026-06-21-comfyui-node-wiki-design.md`](docs/superpowers/specs/2026-06-21-comfyui-node-wiki-design.md)。
 
@@ -65,7 +65,6 @@ pnpm test:watch    # 开发期间监听模式
 
 ## 下一步
 
-- Plan 3：冲突检测引擎 + `POST /api/v1/conflicts/check`（替换 Plan 2 stub）
 - Plan 4：Python Celery 扫描器
 - Plan 5：生产部署
 
@@ -93,7 +92,7 @@ All endpoints return JSON. Wiki endpoints require a session; admin endpoints add
 - `POST /api/v1/wiki/{versionId}/revisions` — create a pending revision (zod-validated)
 - `POST /api/v1/wiki/revisions/{id}/withdraw` — author or admin only
 - `GET  /api/v1/wiki/diff?from={id}&to={id}` — field-level diff
-- `POST /api/v1/conflicts/check` — **stub** (Plan 3 implements the real PEP 440 engine)
+- `POST /api/v1/conflicts/check` — real PEP 440 conflict detection (4 conflict types; accepts optional `draft` field for wiki edit preview)
 - `GET  /api/v1/admin/revisions/pending?page=&page_size=`
 - `POST /api/v1/admin/revisions/{id}/approve` — body `{ review_note?: string }`
 - `POST /api/v1/admin/revisions/{id}/reject`  — body `{ review_note: string }`
@@ -122,10 +121,56 @@ For UI smoke tests see the **Manual smoke test** steps in `docs/superpowers/plan
 
 ## Known limits (Plan 2)
 
-- **`POST /api/v1/conflicts/check` is a stub.** It always returns `{ conflicts: [] }`. The real PEP 440 conflict detection engine arrives in Plan 3 (`docs/superpowers/specs/2026-06-25-plan-02-wiki-editing.md` §6). The `<ConflictPreview>` UI component in the wiki edit form reflects this with a "暂未启用" placeholder.
-- **No automated submissions.** New node submissions are created by users through the wiki edit form (Plan 3) and reviewed manually; there is no scanner-driven queue in Plan 2.
+- **No automated submissions.** New node submissions are created by users through the wiki edit form and reviewed manually; there is no scanner-driven queue in Plan 2.
 - **No email notifications.** When an admin approves or rejects a revision, the author is not notified. The author's `/wiki/<versionId>` view will reflect the new status on next visit.
 - **Approved revisions cannot be edited or re-submitted.** They are immutable. A new pending revision must be created from scratch.
 - **Self-demotion is blocked.** An admin can promote other users to admin but cannot demote themselves; an out-of-band DB update is required to recover (the bootstrap admin via `BOOTSTRAP_ADMIN_GITHUB_ID` is one such recovery path).
-- **The conflict-engine and `<ConflictPreview>` are placeholders.** Plan 3 fills them in with a real algorithm and an editor-side debounce-and-render loop.
 - **Out of scope (deferred plans):** Python Celery scanner (Plan 4), production deployment / CI / monitoring / Docker (Plan 5).
+
+## Conflict detection engine (Plan 3)
+
+`POST /api/v1/conflicts/check` now runs a real PEP 440-based conflict detection algorithm in `web/lib/conflict-engine.ts`. The endpoint takes:
+
+```json
+{
+  "installed": [{"owner": "...", "repo": "...", "version_tag": "..."}],
+  "draft": {                       // OPTIONAL — wiki edit form uses this
+    "python_min": "...", "python_max": "...",
+    "dependencies": [...],
+    "node_class_mappings": [...],
+    "incompatibilities": [...]
+  }
+}
+```
+
+It returns 4 categories of conflicts:
+
+- `python_version` (error) — node pairs with non-overlapping `python_min`/`python_max`
+- `package_version` (error if pinned+incompatible, warning if ranges disjoint) — packages with the same name but incompatible specs
+- `node_class` (error) — class names declared by 2+ nodes
+- `incompatibility` (warning) — node pairs that declare each other as incompatible
+
+### Wiki edit page integration
+
+The `<ConflictPreview>` component on `/wiki/[versionId]` debounces the form state by 500ms and shows real-time conflicts against all other published nodes.
+
+### API + algorithm
+
+- The `@renovatebot/pep440` npm package parses spec strings (`>=1.0.0,<2.0.0`, `==1.5.0`, etc.) into `(min, max, is_pinned)` tuples.
+- Pure-function detectors live in `web/lib/conflict-engine.ts`; each is unit-tested in `web/tests/lib/conflict-engine.test.ts`.
+- The `checkConflicts()` orchestrator loads each installed version's published data via `getPublishedRequirements()` and applies the `draft` as a virtual node.
+
+## Testing (Plan 3 additions)
+
+Plan 3 adds:
+- `web/tests/lib/pep440-utils.test.ts` — 18 tests for spec parsing + range intersection
+- `web/tests/lib/conflict-engine.test.ts` — 12 detector tests + 3 integration tests (real DB)
+- `web/tests/api/conflicts-check.test.ts` — extended with `draft` field tests
+
+## Known limits (Plan 3)
+
+- **`node_class_mappings` is not editable in the wiki form.** The Plan 2 form has a placeholder ("暂不支持多个映射数组 — Plan 3 改进") and Plan 3 does not fix it. The conflict engine fully supports `node_class` detection, but only against the `installed` list, not the `draft`. To fix: add a `NodeClassMappingEditor` component (deferred).
+- **No caching.** Every form keystroke (after debounce) triggers a fresh DB load. Acceptable for now (the query is small) but a future plan can add Redis-backed caching.
+- **No background conflict scan.** The check is on-demand only; the wiki edit page does not pre-warm conflicts.
+- **Pinned-version check uses simple intersection.** A pinned `==X.Y.Z` is treated as `[X.Y.Z, X.Y.Z]`. Exotic cases like `===X.Y.Z` or `~=X.Y.Z` may not be fully handled — verify against real-world spec strings in Plan 4 integration.
+- **Out of scope (deferred plans):** Python Celery scanner (Plan 4), production deployment (Plan 5), resolving Plan 2's 2 Important non-blocking findings (TOCTOU in reject/withdraw; submit page missing page-level gate).
