@@ -63,6 +63,8 @@ export function WikiEditForm({ versionId, initialPublished, initialPending, inst
   const pyMin = watch('python_min');
   const pyMax = watch('python_max');
   const notes = watch('notes_md');
+  const dependencies = watch('dependencies');
+  const incompatibilities = watch('incompatibilities');
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
@@ -125,17 +127,17 @@ export function WikiEditForm({ versionId, initialPublished, initialPending, inst
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold">冲突预览（Plan 3 启用）</h2>
+        <h2 className="mb-2 text-sm font-semibold">冲突预览</h2>
         <ConflictPreview
           installed={installed}
           draft={{
-            python_min: pyMin ?? null,
-            python_max: pyMax ?? null,
-            dependencies: watch('dependencies'),
+            python_min: pyMin,
+            python_max: pyMax,
+            dependencies,
             node_class_mappings: [],
-            incompatibilities: watch('incompatibilities'),
+            incompatibilities,
           }}
-          currentLabel={`v${initialPublished.version_tag}`}
+          currentLabel={`version ${versionId}`}
         />
       </section>
 
