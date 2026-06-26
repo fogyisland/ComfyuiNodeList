@@ -19,6 +19,7 @@ type Props = {
   versionId: number;
   initialPublished: PublishedRequirements;
   initialPending: LatestPending | null;
+  installed: Array<{ owner: string; repo: string; version_tag: string }>;
 };
 
 type FormShape = {
@@ -41,7 +42,7 @@ function toFormShape(p: PublishedRequirements): FormShape {
   };
 }
 
-export function WikiEditForm({ versionId, initialPublished, initialPending }: Props) {
+export function WikiEditForm({ versionId, initialPublished, initialPending, installed }: Props) {
   const { register, watch, setValue, getValues, handleSubmit } = useForm<FormShape>({
     defaultValues: toFormShape(initialPublished),
   });

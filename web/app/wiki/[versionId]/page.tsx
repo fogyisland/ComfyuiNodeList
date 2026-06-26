@@ -28,6 +28,27 @@ export default async function WikiEditPage({ params }: Props) {
     },
     orderBy: { created_at: 'desc' },
   });
+
+  // NEW: fetch latest version of every OTHER node
+  const allNodes = await prisma.node.findMany({
+    include: {
+      versions: {
+        orderBy: { release_date: 'desc' },
+        take: 1,
+        select: { id: true, version_tag: true },
+      },
+    },
+  });
+  const otherInstalled = allNodes
+    .filter((node) => !node.versions.some((v) => Number(v.id) === id))
+    .flatMap((node) =>
+      node.versions.map((v) => ({
+        owner: node.github_owner,
+        repo: node.github_repo,
+        version_tag: v.version_tag,
+      })),
+    );
+
   return (
     <main className="mx-auto max-w-3xl p-6">
       <header className="mb-4">
@@ -46,6 +67,7 @@ export default async function WikiEditPage({ params }: Props) {
               }
             : null
         }
+        installed={otherInstalled}
       />
     </main>
   );
