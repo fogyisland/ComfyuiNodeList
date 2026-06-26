@@ -121,7 +121,7 @@ model WikiRevision {
   author   User        @relation("RevisionAuthor", fields: [author_id], references: [id])
   reviewer User?       @relation("RevisionReviewer", fields: [reviewer_id], references: [id])
 
-  @@index([version_id, status, created_at(sort: Desc)])
+  @@index([version_id, status, created_at])
   @@map("wiki_revisions")
 }
 
@@ -152,6 +152,6 @@ model ScanFailure {
 
   node Node @relation(fields: [node_id], references: [id], onDelete: Cascade)
 
-  @@index([node_id, occurred_at(sort: Desc)])
+  @@index([node_id, occurred_at])
   @@map("scan_failures")
 }
