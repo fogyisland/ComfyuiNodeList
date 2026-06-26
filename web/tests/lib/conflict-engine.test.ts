@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   detectPythonVersionConflicts,
   detectPackageVersionConflicts,
@@ -121,5 +121,111 @@ describe('detectIncompatibilityConflicts', () => {
     ]);
     // Single pair → one conflict (not two)
     expect(r).toHaveLength(1);
+  });
+});
+
+import { setup } from '../setup';
+import { prisma } from '@/lib/db';
+import { checkConflictsWithDraft } from '@/lib/conflict-engine';
+
+describe('checkConflictsWithDraft (integration)', () => {
+  beforeEach(async () => {
+    await setup();
+    // Seed: 2 nodes, 1 version each, with conflicting python ranges
+    await prisma.node.create({
+      data: {
+        github_owner: 'ltdrdata',
+        github_repo: 'ComfyUI-Impact-Pack',
+        name: 'Impact Pack',
+        author: 'ltdrdata',
+        status: 'active',
+        versions: {
+          create: [
+            {
+              version_tag: 'v8.10',
+              git_sha: 'a'.repeat(40),
+              release_date: new Date('2026-01-01'),
+              raw_requirements: {
+                create: {
+                  python_min: '3.8',
+                  python_max: '3.9',
+                  dependencies: [],
+                  node_class_mappings: [],
+                  incompatibilities: [],
+                  scan_warnings: [],
+                  raw_files: {},
+                },
+              },
+            },
+          ],
+        },
+      },
+    });
+    await prisma.node.create({
+      data: {
+        github_owner: 'rgthree',
+        github_repo: 'rgthree-comfy',
+        name: 'rgthree',
+        author: 'rgthree',
+        status: 'active',
+        versions: {
+          create: [
+            {
+              version_tag: 'v1.0.3',
+              git_sha: 'b'.repeat(40),
+              release_date: new Date('2026-01-01'),
+              raw_requirements: {
+                create: {
+                  python_min: '3.10',
+                  python_max: '3.12',
+                  dependencies: [],
+                  node_class_mappings: [],
+                  incompatibilities: [],
+                  scan_warnings: [],
+                  raw_files: {},
+                },
+              },
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  it('returns python_version error when ranges do not overlap', async () => {
+    const r = await checkConflictsWithDraft([
+      { owner: 'ltdrdata', repo: 'ComfyUI-Impact-Pack', version_tag: 'v8.10' },
+      { owner: 'rgthree', repo: 'rgthree-comfy', version_tag: 'v1.0.3' },
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].type).toBe('python_version');
+  });
+
+  it('returns no conflicts when ranges overlap', async () => {
+    await prisma.nodeRawRequirement.update({
+      where: { version_id: (await prisma.nodeVersion.findFirst({ where: { version_tag: 'v8.10' } }))!.id },
+      data: { python_min: '3.10', python_max: '3.12' },
+    });
+    const r = await checkConflictsWithDraft([
+      { owner: 'ltdrdata', repo: 'ComfyUI-Impact-Pack', version_tag: 'v8.10' },
+      { owner: 'rgthree', repo: 'rgthree-comfy', version_tag: 'v1.0.3' },
+    ]);
+    expect(r).toEqual([]);
+  });
+
+  it('applies draft as a virtual node and detects conflicts', async () => {
+    const r = await checkConflictsWithDraft(
+      [{ owner: 'ltdrdata', repo: 'ComfyUI-Impact-Pack', version_tag: 'v8.10' }],
+      {
+        python_min: '3.10',
+        python_max: '3.12',
+        dependencies: [],
+        node_class_mappings: [],
+        incompatibilities: [],
+      },
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0].type).toBe('python_version');
+    expect(r[0].nodes).toContain('<draft>');
   });
 });

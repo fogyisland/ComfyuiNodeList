@@ -1,3 +1,5 @@
+import { prisma } from './db';
+import { getPublishedRequirements } from './published';
 import { intersectRanges, parseSpec, rangesOverlap } from './pep440-utils';
 import type { PublishedDependency } from './published';
 
@@ -20,9 +22,63 @@ export type ConflictNodeData = {
   incompatibilities: string[];
 };
 
-export async function checkConflicts(_req: ConflictCheckRequest): Promise<Conflict[]> {
-  // Wired in Task 4 — for now, return empty so the file compiles.
-  return [];
+export type ConflictDraftData = {
+  python_min?: string | null;
+  python_max?: string | null;
+  dependencies: PublishedDependency[];
+  node_class_mappings: string[];
+  incompatibilities: string[];
+};
+
+export async function checkConflicts(req: ConflictCheckRequest): Promise<Conflict[]> {
+  return checkConflictsWithDraft(req.installed, (req as { draft?: ConflictDraftData }).draft);
+}
+
+export async function checkConflictsWithDraft(
+  installed: ConflictCheckRequest['installed'],
+  draft?: ConflictDraftData,
+): Promise<Conflict[]> {
+  const data: ConflictNodeData[] = [];
+  // Load all installed versions
+  for (const ref of installed) {
+    const version = await prisma.nodeVersion.findFirst({
+      where: { version_tag: ref.version_tag, node: { github_owner: ref.owner, github_repo: ref.repo } },
+    });
+    if (!version) {
+      console.warn(`[conflict-engine] installed ref not found: ${ref.owner}/${ref.repo}@${ref.version_tag}`);
+      continue;
+    }
+    const pub = await getPublishedRequirements(Number(version.id));
+    data.push({
+      label: `${ref.owner}/${ref.repo}@${ref.version_tag}`,
+      python_min: pub.python_min,
+      python_max: pub.python_max,
+      dependencies: pub.dependencies,
+      node_class_mappings: pub.node_class_mappings,
+      incompatibilities: pub.incompatibilities,
+    });
+  }
+  // Apply draft as virtual node
+  if (draft) {
+    data.push({
+      label: '<draft>',
+      python_min: draft.python_min ?? null,
+      python_max: draft.python_max ?? null,
+      dependencies: draft.dependencies,
+      node_class_mappings: draft.node_class_mappings,
+      incompatibilities: draft.incompatibilities,
+    });
+  }
+  // Run all 4 detectors
+  const conflicts: Conflict[] = [
+    ...detectPythonVersionConflicts(data),
+    ...detectPackageVersionConflicts(data),
+    ...detectNodeClassConflicts(data),
+    ...detectIncompatibilityConflicts(data),
+  ];
+  // Sort for determinism
+  conflicts.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return conflicts;
 }
 
 export function detectPythonVersionConflicts(nodes: ConflictNodeData[]): Conflict[] {

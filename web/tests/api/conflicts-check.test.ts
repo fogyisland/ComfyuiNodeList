@@ -8,8 +8,16 @@ vi.mock('@/lib/auth', () => ({ auth: authMock }));
 // not seeded in this file (the brief explicitly excludes setup()/seedFixture
 // since the endpoint itself does not touch the DB), so stub the lookup to
 // return a user whose id matches whatever authMock provides.
+// Task 4: checkConflicts now loads via prisma.nodeVersion.findFirst; stub
+// it too so the mock remains DB-isolated.
 const findUniqueMock = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/db', () => ({ prisma: { user: { findUnique: findUniqueMock } } }));
+const findFirstMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/db', () => ({
+  prisma: {
+    user: { findUnique: findUniqueMock },
+    nodeVersion: { findFirst: findFirstMock },
+  },
+}));
 
 import { POST } from '@/app/api/v1/conflicts/check/route';
 
@@ -17,6 +25,7 @@ describe('POST /api/v1/conflicts/check', () => {
   beforeEach(() => {
     authMock.mockReset();
     findUniqueMock.mockReset();
+    findFirstMock.mockReset();
     // Default: every id resolves to a synthetic user. Individual tests can
     // override findUniqueMock to simulate missing / unauthenticated cases.
     findUniqueMock.mockImplementation(async ({ where: { id } }: { where: { id: bigint } }) => ({
@@ -26,6 +35,8 @@ describe('POST /api/v1/conflicts/check', () => {
       avatar_url: '',
       role: 'user',
     }));
+    // Default: no NodeVersion matches → checkConflicts returns [].
+    findFirstMock.mockResolvedValue(null);
   });
 
   it('returns 401 when not authenticated', async () => {
