@@ -112,7 +112,7 @@ pnpm lint                  # Next/ESLint
 ```
 
 Tests cover:
-- `web/tests/lib/` — unit tests for `wiki-schema`, `diff`, `wiki` (helpers), `conflict-engine` stub, `revision-status` enum.
+- `web/tests/lib/` — unit tests for `wiki-schema`, `diff`, `wiki` (helpers), `conflict-engine`, `revision-status` enum.
 - `web/tests/api/` — integration tests for the 15 new endpoints under `/api/v1/wiki`, `/api/v1/conflicts/check`, and `/api/v1/admin`.
 
 The test DB (`comfyui_nodes_test`) is reset between files via `prisma db push --force-reset` in `web/tests/setup.ts`. Vitest uses `fileParallelism: false` (configured in `vitest.config.ts`) so the shared `prisma client` does not race.

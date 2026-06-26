@@ -39,26 +39,28 @@ export async function checkConflictsWithDraft(
   installed: ConflictCheckRequest['installed'],
   draft?: ConflictDraftData,
 ): Promise<Conflict[]> {
-  const data: ConflictNodeData[] = [];
-  // Load all installed versions
-  for (const ref of installed) {
-    const version = await prisma.nodeVersion.findFirst({
-      where: { version_tag: ref.version_tag, node: { github_owner: ref.owner, github_repo: ref.repo } },
-    });
-    if (!version) {
-      console.warn(`[conflict-engine] installed ref not found: ${ref.owner}/${ref.repo}@${ref.version_tag}`);
-      continue;
-    }
-    const pub = await getPublishedRequirements(Number(version.id));
-    data.push({
-      label: `${ref.owner}/${ref.repo}@${ref.version_tag}`,
-      python_min: pub.python_min,
-      python_max: pub.python_max,
-      dependencies: pub.dependencies,
-      node_class_mappings: pub.node_class_mappings,
-      incompatibilities: pub.incompatibilities,
-    });
-  }
+  // Load all installed versions in parallel
+  const loaded = await Promise.all(
+    installed.map(async (ref) => {
+      const version = await prisma.nodeVersion.findFirst({
+        where: { version_tag: ref.version_tag, node: { github_owner: ref.owner, github_repo: ref.repo } },
+      });
+      if (!version) {
+        console.warn(`[conflict-engine] installed ref not found: ${ref.owner}/${ref.repo}@${ref.version_tag}`);
+        return null;
+      }
+      const pub = await getPublishedRequirements(Number(version.id));
+      return {
+        label: `${ref.owner}/${ref.repo}@${ref.version_tag}`,
+        python_min: pub.python_min,
+        python_max: pub.python_max,
+        dependencies: pub.dependencies,
+        node_class_mappings: pub.node_class_mappings,
+        incompatibilities: pub.incompatibilities,
+      };
+    }),
+  );
+  const data: ConflictNodeData[] = loaded.filter((x): x is ConflictNodeData => x !== null);
   // Apply draft as virtual node
   if (draft) {
     data.push({

@@ -17,7 +17,10 @@ export default async function WikiEditPage({ params }: Props) {
   }
   const id = Number(versionId);
   if (!Number.isInteger(id) || id < 1) notFound();
-  const v = await prisma.nodeVersion.findUnique({ where: { id: BigInt(id) } });
+  const v = await prisma.nodeVersion.findUnique({
+    where: { id: BigInt(id) },
+    select: { id: true, node_id: true },
+  });
   if (!v) notFound();
   const published = await getPublishedRequirements(id);
   const latest = await prisma.wikiRevision.findFirst({
@@ -40,12 +43,12 @@ export default async function WikiEditPage({ params }: Props) {
     },
   });
   const otherInstalled = allNodes
-    .filter((node) => !node.versions.some((v) => Number(v.id) === id))
+    .filter((node) => node.id !== v.node_id) // exclude the entire node, not just one version
     .flatMap((node) =>
-      node.versions.map((v) => ({
+      node.versions.map((v2) => ({
         owner: node.github_owner,
         repo: node.github_repo,
-        version_tag: v.version_tag,
+        version_tag: v2.version_tag,
       })),
     );
 
