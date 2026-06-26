@@ -1,6 +1,8 @@
+import io
 import os
 import shutil
 import subprocess
+import tarfile
 from datetime import datetime, timezone
 
 import pytest
@@ -14,6 +16,7 @@ os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
 from scanner.celery_app import celery_app
 from scanner.db import get_active_nodes, get_connection, upsert_version
 from scanner.tasks.fetch_releases import fetch_releases
+from scanner.tasks.parse_version import parse_version
 
 
 @pytest.fixture
@@ -111,3 +114,65 @@ def test_fetch_releases_uses_token_when_provided(db_eager, httpx_mock, monkeypat
     fetch_releases(node_id, "foo", "bar")
     request = httpx_mock.get_request()
     assert request.headers.get("authorization") == "Bearer ghp_test_token"
+
+
+def _make_tarball(files: dict) -> bytes:
+    """Create an in-memory tar.gz containing the given files."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        for name, content in files.items():
+            data = content.encode("utf-8")
+            info = tarfile.TarInfo(name=f"repo-root/{name}")
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
+def test_parse_version_extracts_and_upserts(db_eager, httpx_mock):
+    node_id = _insert_node(db_eager, "foo", "bar")
+    version_id = upsert_version(node_id, "v1.0.0", "a" * 40, datetime(2026, 6, 1, tzinfo=timezone.utc))
+    tarball = _make_tarball({
+        "pyproject.toml": '[project]\nrequires-python = ">=3.10"\ndependencies = ["torch>=2.0.0"]\n',
+        "__init__.py": 'NODE_CLASS_MAPPINGS = {"Foo": X}\n',
+        "README.md": "Incompatible with: bad-node\n",
+    })
+    httpx_mock.add_response(url="https://example.com/v1.0.0.tar.gz", content=tarball)
+    result = parse_version(node_id, version_id, "foo", "bar", "https://example.com/v1.0.0.tar.gz")
+    assert result is not None
+    assert result["python_min"] == "3.10"
+    assert "Foo" in result["node_class_mappings"]
+    assert "bad-node" in result["incompatibilities"]
+    # Verify DB
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT python_min FROM node_raw_requirements WHERE version_id = %s", (version_id,))
+            row = cur.fetchone()
+    assert row["python_min"] == "3.10"
+
+
+def test_parse_version_returns_none_on_404(db_eager, httpx_mock):
+    node_id = _insert_node(db_eager, "missing", "repo")
+    version_id = upsert_version(node_id, "v1.0.0", "a" * 40, datetime(2026, 6, 1, tzinfo=timezone.utc))
+    # Eager mode + autoretry: 4 calls (1 + 3 retries) all 404
+    httpx_mock.add_response(url="https://example.com/v1.0.0.tar.gz", status_code=404)
+    httpx_mock.add_response(url="https://example.com/v1.0.0.tar.gz", status_code=404)
+    httpx_mock.add_response(url="https://example.com/v1.0.0.tar.gz", status_code=404)
+    httpx_mock.add_response(url="https://example.com/v1.0.0.tar.gz", status_code=404)
+    result = parse_version(node_id, version_id, "missing", "repo", "https://example.com/v1.0.0.tar.gz")
+    assert result is None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS c FROM scan_failures WHERE node_id = %s AND task_name = 'parse_version'", (node_id,))
+            row = cur.fetchone()
+    assert row["c"] >= 1
+
+
+def test_parse_version_handles_tarball_with_no_known_files(db_eager, httpx_mock):
+    node_id = _insert_node(db_eager, "foo", "bar")
+    version_id = upsert_version(node_id, "v1.0.0", "a" * 40, datetime(2026, 6, 1, tzinfo=timezone.utc))
+    tarball = _make_tarball({"some_other_file.txt": "hi"})
+    httpx_mock.add_response(url="https://example.com/v1.0.0.tar.gz", content=tarball)
+    result = parse_version(node_id, version_id, "foo", "bar", "https://example.com/v1.0.0.tar.gz")
+    assert result is not None
+    assert result["dependencies"] == []
+    assert result["python_min"] is None
