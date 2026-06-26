@@ -1,12 +1,11 @@
 import ast
 import re
 import sys
-import tomllib
 from typing import Any
 
-if sys.version_info >= (3, 11):
-    pass  # tomllib is in stdlib
-else:  # pragma: no cover
+try:
+    import tomllib
+except ImportError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 from packaging.requirements import InvalidRequirement, Requirement
@@ -32,7 +31,7 @@ def _parse_python_spec(spec: str) -> tuple[str | None, str | None]:
     py_max: str | None = None
     for part in spec.split(","):
         part = part.strip()
-        m = re.match(r"^(>=|>|==|~=)?\s*(\d+\.\d+)", part)
+        m = re.match(r"^(>=|>|==|~=|<=|<)?\s*(\d+\.\d+)", part)
         if not m:
             continue
         op, ver = m.group(1) or ">=", m.group(2)
@@ -133,9 +132,19 @@ def parse_install_py(filename: str, content: str) -> dict[str, Any]:
             if isinstance(node.func, ast.Attribute) and node.func.attr in ("check_call", "run", "call"):
                 for arg in node.args:
                     if isinstance(arg, (ast.List, ast.Tuple)):
-                        for elt in arg.elts:
-                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                                _extract_pip_specs(elt.value, out)
+                        # Special case: ["pip"|"pip3", "install", <specs>...]
+                        elts = [e.value for e in arg.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+                        if len(elts) >= 3 and elts[0] in ("pip", "pip3") and elts[1] == "install":
+                            for spec_str in elts[2:]:
+                                try:
+                                    req = Requirement(spec_str)
+                                    out["dependencies"].append(_req_to_dict(req))
+                                except InvalidRequirement as e:
+                                    out["scan_warnings"].append(f"install.py: invalid spec '{spec_str}': {e}")
+                        else:
+                            for elt in arg.elts:
+                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                    _extract_pip_specs(elt.value, out)
             # os.system("pip install ...")
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "system":
             for arg in node.args:
