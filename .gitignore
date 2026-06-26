@@ -10,3 +10,7 @@ coverage/
 web/prisma/migrations/dev.db*
 .turbo/
 .cache/
+__pycache__/
+*.pyc
+.pytest_cache/
+.scanner_work/

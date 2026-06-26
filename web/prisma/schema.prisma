@@ -60,7 +60,8 @@ model Node {
   created_at    DateTime   @default(now())
   updated_at    DateTime   @updatedAt
 
-  versions NodeVersion[]
+  versions     NodeVersion[]
+  scan_failures ScanFailure[]
 
   @@unique([github_owner, github_repo])
   @@index([status, updated_at])
@@ -139,4 +140,18 @@ model NodeSubmission {
 
   @@index([status, created_at])
   @@map("node_submissions")
+}
+
+model ScanFailure {
+  id            BigInt   @id @default(autoincrement())
+  node_id       BigInt
+  task_name     String   @db.VarChar(128)
+  error_message String   @db.Text
+  occurred_at   DateTime @default(now())
+  will_retry    Boolean  @default(false)
+
+  node Node @relation(fields: [node_id], references: [id], onDelete: Cascade)
+
+  @@index([node_id, occurred_at(sort: Desc)])
+  @@map("scan_failures")
 }
