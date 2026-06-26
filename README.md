@@ -1,6 +1,6 @@
 # ComfyUI Node Wiki
 
-公开的 ComfyUI 节点元数据 Wiki 服务。本仓库目前包含 **Plan 1 + Plan 2 + Plan 3** 的实现。
+公开的 ComfyUI 节点元数据 Wiki 服务。本仓库目前包含 **Plan 1 + Plan 2 + Plan 3 + Plan 4** 的实现。
 
 完整设计规格：[`docs/superpowers/specs/2026-06-21-comfyui-node-wiki-design.md`](docs/superpowers/specs/2026-06-21-comfyui-node-wiki-design.md)。
 
@@ -65,7 +65,6 @@ pnpm test:watch    # 开发期间监听模式
 
 ## 下一步
 
-- Plan 4：Python Celery 扫描器
 - Plan 5：生产部署
 
 ## Wiki editing & admin review (Plan 2)
@@ -174,3 +173,50 @@ Plan 3 adds:
 - **No background conflict scan.** The check is on-demand only; the wiki edit page does not pre-warm conflicts.
 - **Pinned-version check uses simple intersection.** A pinned `==X.Y.Z` is treated as `[X.Y.Z, X.Y.Z]`. Exotic cases like `===X.Y.Z` or `~=X.Y.Z` may not be fully handled — verify against real-world spec strings in Plan 4 integration.
 - **Out of scope (deferred plans):** Python Celery scanner (Plan 4), production deployment (Plan 5), resolving Plan 2's 2 Important non-blocking findings (TOCTOU in reject/withdraw; submit page missing page-level gate).
+
+## Python scanner (Plan 4)
+
+A Python Celery worker (`scanner/`) automatically fetches GitHub releases for every active node, parses 5 file types from each version's source tarball, and writes to `node_raw_requirements`. Runs on a weekly Celery beat schedule (every Monday 03:00 UTC) + on-demand via `POST /api/v1/admin/scans/trigger`.
+
+### Task flow
+
+```
+fetch_pending_nodes → (chord of fetch_releases per node)
+                   → (chord of parse_version per version)
+                   → cleanup_old_versions (keep latest 5)
+```
+
+### Parsers
+
+- `pyproject.toml` — `dependencies` + `requires-python` (stdlib `tomllib`)
+- `requirements.txt` — `packaging.Requirement` per line
+- `install.py` — AST scan for `os.system` / `subprocess.*` calls containing `pip install`
+- `__init__.py` / `nodes.py` — regex for `NODE_CLASS_MAPPINGS = {...}` keys
+- `README.md` — keyword scan for "incompatible with", "conflicts with", etc.
+
+### Tech stack
+
+- Python 3.11+ (uses stdlib `tomllib`)
+- Celery 5 + Redis broker
+- `httpx` (GitHub API), `pymysql` (raw SQL), `packaging` (PEP 440 specs)
+
+### Testing (Plan 4 additions)
+
+- `scanner/tests/test_github.py` — httpx mock + retry behavior
+- `scanner/tests/test_db.py` — pymysql upsert + delete-old-versions
+- `scanner/tests/test_parsers.py` — 5 parsers + pipeline (14 tests)
+- `scanner/tests/test_tasks.py` — Celery tasks in `task_always_eager=True` mode
+- `scanner/tests/test_integration.py` — full chain end-to-end
+- `web/tests/api/admin-scans-trigger.test.ts` — manual-trigger endpoint
+
+Run the Python suite: `cd scanner && pip install -r requirements-dev.txt && pytest`.
+Run the web suite: `cd web && pnpm test`.
+
+## Known limits (Plan 4)
+
+- **`install.py` parser is regex/AST-light.** It handles `os.system` and `subprocess.check_call/run/call` with simple `pip install` payloads, but complex multi-line constructions or `runpy`/`importlib` indirection are not extracted. Sufficient for the ~95% of ComfyUI nodes that use the standard `install.py` pattern. A full AST visitor is a follow-up.
+- **Worker-side "scan_runs polling" deferred.** The `POST /api/v1/admin/scans/trigger` web endpoint currently records the trigger and returns 200 immediately; a Plan 4 follow-up will add a worker-side poller that picks up triggers and calls `fetch_pending_nodes`. The weekly beat schedule is fully functional; manual triggers are best-effort.
+- **No `scan_failures` admin UI.** The table is populated, but there's no web page to view / retry. A follow-up plan adds a `/admin/scans` page.
+- **Celery on Windows uses `pool=solo` for dev.** Production (Plan 5) uses `pool=prefork` on Linux.
+- **Exotic PEP 440 specifiers (`~=`, `===`, `!=`) in `requirements.txt` are parsed but not visualized in conflict detection.** Plan 3's `pep440-utils.intersectRanges` does not handle these. Real-world ComfyUI node data may need this — track in Plan 4 follow-up.
+- **Out of scope (deferred plans):** production deployment / CI / monitoring / Docker Compose (Plan 5), webhook-based real-time triggering (spec §14), Plan 2's 2 deferred Important findings.
