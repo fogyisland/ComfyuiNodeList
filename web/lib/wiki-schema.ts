@@ -48,13 +48,15 @@ export const ChangeRoleBody = z
   .object({ role: z.enum(['admin', 'user']) })
   .strict();
 
-export const ConflictDraftSchema = z.object({
-  python_min: z.union([pythonVersion, z.null()]).optional(),
-  python_max: z.union([pythonVersion, z.null()]).optional(),
-  dependencies: z.array(PublishedDependencySchema),
-  node_class_mappings: z.array(z.string()),
-  incompatibilities: z.array(z.string()),
-});
+export const ConflictDraftSchema = z
+  .object({
+    python_min: z.union([pythonVersion, z.null()]).optional(),
+    python_max: z.union([pythonVersion, z.null()]).optional(),
+    dependencies: z.array(PublishedDependencySchema),
+    node_class_mappings: z.array(z.string()),
+    incompatibilities: z.array(z.string()),
+  })
+  .strict();
 
 export const ConflictCheckBody = z
   .object({

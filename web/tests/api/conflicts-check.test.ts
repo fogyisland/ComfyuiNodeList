@@ -122,10 +122,8 @@ describe('POST /api/v1/conflicts/check', () => {
   });
 
   it('rejects unknown fields in draft (strict nested schema)', async () => {
-    // ConflictDraftSchema is z.object({...}) (non-strict per the brief),
-    // so unknown keys inside `draft` are silently ignored — they do NOT
-    // trigger 400. The strictness only applies at the body level
-    // (ConflictCheckBody is .strict()).
+    // ConflictDraftSchema is .strict(), so unknown keys inside `draft`
+    // trigger 400 (same contract as the top-level body's .strict()).
     authMock.mockResolvedValue({ user: { id: '1', role: 'user' } });
     const res = await POST(
       new NextRequest('http://x', {
@@ -143,7 +141,6 @@ describe('POST /api/v1/conflicts/check', () => {
         }),
       }),
     );
-    // Unknown nested key is silently dropped (non-strict draft schema).
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
   });
 });
