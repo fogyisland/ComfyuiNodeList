@@ -126,7 +126,17 @@ export function WikiEditForm({ versionId, initialPublished, initialPending, inst
 
       <section>
         <h2 className="mb-2 text-sm font-semibold">冲突预览（Plan 3 启用）</h2>
-        <ConflictPreview versionId={String(versionId)} />
+        <ConflictPreview
+          installed={installed}
+          draft={{
+            python_min: pyMin ?? null,
+            python_max: pyMax ?? null,
+            dependencies: watch('dependencies'),
+            node_class_mappings: [],
+            incompatibilities: watch('incompatibilities'),
+          }}
+          currentLabel={`v${initialPublished.version_tag}`}
+        />
       </section>
 
       <section>
