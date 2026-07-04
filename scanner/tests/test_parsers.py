@@ -160,3 +160,22 @@ def test_parse_version_files_empty_input():
     assert result["dependencies"] == []
     assert result["node_class_mappings"] == []
     assert result["incompatibilities"] == []
+
+
+def test_is_pinned_true_for_exact_pin():
+    from scanner.parsers import parse_requirements_txt
+    out = parse_requirements_txt("requirements.txt", "torch==2.0.0\n")
+    assert out["dependencies"][0]["is_pinned"] is True
+
+
+def test_is_pinned_false_for_range():
+    from scanner.parsers import parse_requirements_txt
+    out = parse_requirements_txt("requirements.txt", "torch>=2.0.0,<3.0.0\n")
+    assert out["dependencies"][0]["is_pinned"] is False
+
+
+def test_is_pinned_false_for_pin_with_exclusion():
+    """==1.0,!=2.0 is NOT pinned — it has 2 specifiers."""
+    from scanner.parsers import parse_requirements_txt
+    out = parse_requirements_txt("requirements.txt", "torch==1.0.0,!=1.0.1\n")
+    assert out["dependencies"][0]["is_pinned"] is False

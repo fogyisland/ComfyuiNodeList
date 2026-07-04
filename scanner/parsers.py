@@ -51,7 +51,9 @@ def _ver_tuple(v: str) -> tuple[int, ...]:
 def _req_to_dict(req: Requirement) -> dict[str, Any]:
     """Convert a packaging.Requirement to the {name, spec, min_version, max_version, is_pinned} shape."""
     spec_str = str(req.specifier) if req.specifier else ""
-    is_pinned = "==" in spec_str and "," not in spec_str
+    # Pinned = exactly one specifier, and that specifier is `==X.Y.Z`
+    specs_list = list(req.specifier)
+    is_pinned = len(specs_list) == 1 and str(specs_list[0]).startswith("==")
     min_v: str | None = None
     max_v: str | None = None
     for s in req.specifier:
@@ -92,9 +94,6 @@ def parse_pyproject_toml(filename: str, content: str) -> dict[str, Any]:
     return out
 
 
-_REQ_LINE_RE = re.compile(r"^\s*([A-Za-z0-9_.\-]+)")
-
-
 def parse_requirements_txt(filename: str, content: str) -> dict[str, Any]:
     out = _empty()
     out["raw_files"][filename] = content
@@ -113,7 +112,6 @@ def parse_requirements_txt(filename: str, content: str) -> dict[str, Any]:
 
 
 _PIP_INSTALL_RE = re.compile(r"pip[3]?\s+install\s+([^\"'#]+)")
-_QUOTED_RE = re.compile(r"['\"]([A-Za-z0-9_.\-]+)\s*([<>=!~]+\s*[^'\"]+)?['\"]")
 
 
 def parse_install_py(filename: str, content: str) -> dict[str, Any]:

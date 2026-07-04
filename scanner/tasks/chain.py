@@ -1,4 +1,4 @@
-from celery import chord, group
+from celery import Signature, group
 from scanner.celery_app import celery_app
 
 from scanner.tasks.cleanup import cleanup
@@ -6,7 +6,7 @@ from scanner.tasks.fetch_releases import fetch_releases
 from scanner.tasks.parse_version import parse_version
 
 
-def build_chain(nodes: list[dict]) -> chord:
+def build_chain(nodes: list[dict]) -> Signature:
     """Compose the full scan chain: for each node, (fetch_releases → chord of parse_version) → cleanup.
     `nodes` is a list of {node_id, owner, repo} dicts (typically from fetch_pending_nodes)."""
     # For each node, build a sub-chain: fetch_releases → chord of parse_version
