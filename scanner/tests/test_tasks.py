@@ -199,7 +199,14 @@ def test_cleanup_is_noop_when_all_nodes_have_5_or_fewer(db_eager):
 
 
 def test_cleanup_does_not_touch_wiki_revisions(db_eager):
-    """Per spec §7.2 Task 4: cleanup must NOT delete wiki_revisions."""
+    """Per spec §7.2 Task 4: cleanup must NOT delete wiki_revisions.
+
+    After Plan 5 schema FK migration, wiki_revisions are preserved by REASSIGNING
+    them to the most-recent surviving version of the same node (not by keeping
+    the version alive). The wiki_revision row count is unchanged, but its
+    version_id is moved from the deleted (oldest) version to the newest surviving
+    version.
+    """
     from scanner.db import get_connection
     node_id = _insert_node(db_eager, "foo", "bar")
     for i in range(7):
@@ -209,6 +216,8 @@ def test_cleanup_does_not_touch_wiki_revisions(db_eager):
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM node_versions WHERE node_id = %s ORDER BY release_date ASC LIMIT 1", (node_id,))
             oldest_vid = cur.fetchone()["id"]
+            cur.execute("SELECT id FROM node_versions WHERE node_id = %s ORDER BY release_date DESC LIMIT 1", (node_id,))
+            newest_vid = cur.fetchone()["id"]
             # Need a user to be the author
             cur.execute("INSERT INTO users (github_id, username, avatar_url, role) VALUES (1, 'u', '', 'user')")
             user_id = cur.lastrowid
@@ -221,9 +230,46 @@ def test_cleanup_does_not_touch_wiki_revisions(db_eager):
     cleanup()
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM wiki_revisions WHERE version_id = %s", (oldest_vid,))
-            count = cur.fetchone()["COUNT(*)"]
-    assert count == 1  # wiki_revisions are preserved
+            # Row count unchanged (no deletion)
+            cur.execute("SELECT COUNT(*) AS n FROM wiki_revisions")
+            total = cur.fetchone()["n"]
+            # All surviving versions: wiki_revision now points to the newest surviving version
+            cur.execute("SELECT version_id FROM wiki_revisions")
+            new_vid = cur.fetchone()["version_id"]
+    assert total == 1  # wiki_revisions row preserved
+    assert new_vid == newest_vid  # reassigned to newest surviving version
+    assert new_vid != oldest_vid  # no longer on the deleted version
+
+
+def test_cleanup_reassigns_orphan_revisions_to_newest_surviving_version(db_eager):
+    """When a version with wiki_revisions is deleted, the wiki_revisions are reassigned
+    to the most-recent surviving version of the same node (not orphaned, not deleted)."""
+    from scanner.db import get_connection
+    node_id = _insert_node(db_eager, "foo", "bar")
+    for i in range(6):
+        upsert_version(node_id, f"v{i + 1}.0.0", f"{i:040d}", datetime(2026, 1, i + 1, tzinfo=timezone.utc))
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM node_versions WHERE node_id = %s ORDER BY release_date ASC LIMIT 1", (node_id,))
+            v1_id = cur.fetchone()["id"]
+            cur.execute("SELECT id FROM node_versions WHERE node_id = %s ORDER BY release_date DESC LIMIT 1", (node_id,))
+            v6_id = cur.fetchone()["id"]
+            cur.execute("INSERT INTO users (github_id, username, avatar_url, role) VALUES (2, 'u2', '', 'user')")
+            user_id = cur.lastrowid
+            cur.execute(
+                "INSERT INTO wiki_revisions (version_id, author_id, dependencies, node_class_mappings, incompatibilities, notes_md, edit_summary, status) "
+                "VALUES (%s, %s, '[]', '[]', '[]', 'note', 'edit', 'pending')",
+                (v1_id, user_id),
+            )
+        conn.commit()
+    # Run cleanup with keep=5 — v1 (oldest) is the only candidate for deletion
+    from scanner.db import delete_old_versions
+    delete_old_versions(node_id, keep=5)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT version_id FROM wiki_revisions")
+            new_vid = cur.fetchone()["version_id"]
+    assert new_vid == v6_id  # reassigned to the newest surviving version
 
 
 from scanner.tasks.chain import build_chain

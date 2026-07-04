@@ -117,7 +117,7 @@ model WikiRevision {
   reviewed_at         DateTime?
   created_at          DateTime       @default(now())
 
-  version  NodeVersion @relation(fields: [version_id], references: [id], onDelete: Cascade)
+  version  NodeVersion @relation(fields: [version_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   author   User        @relation("RevisionAuthor", fields: [author_id], references: [id])
   reviewer User?       @relation("RevisionReviewer", fields: [reviewer_id], references: [id])
 

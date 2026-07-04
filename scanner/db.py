@@ -120,8 +120,10 @@ def record_scan_failure(node_id: int, task_name: str, error_message: str, will_r
 
 def delete_old_versions(node_id: int, keep: int = 5) -> int:
     """Delete versions beyond `keep` (oldest first) for a node. Returns count deleted.
-    Versions that have `wiki_revisions` rows referencing them are preserved (per spec §7.2 Task 4:
-    cleanup must NOT delete wiki_revisions). `node_raw_requirements` rows are removed via FK CASCADE."""
+    `node_raw_requirements` rows are removed via FK CASCADE on the raw_requirements table.
+    `wiki_revisions` rows are preserved and reassigned to the most-recent surviving version
+    of the same node — see `reassign_orphan_revisions` for the FK migration logic.
+    """
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -139,21 +141,41 @@ def delete_old_versions(node_id: int, keep: int = 5) -> int:
             candidate_ids = [row["id"] for row in cur.fetchall()]
             if not candidate_ids:
                 return 0
-            # Exclude versions that have wiki_revisions pointing to them (preserve those).
-            wr_placeholders = ",".join(["%s"] * len(candidate_ids))
-            cur.execute(
-                f"SELECT DISTINCT version_id FROM wiki_revisions WHERE version_id IN ({wr_placeholders})",
-                candidate_ids,
-            )
-            protected_ids = {row["version_id"] for row in cur.fetchall()}
-            deletable_ids = [vid for vid in candidate_ids if vid not in protected_ids]
-            if not deletable_ids:
-                return 0
-            del_placeholders = ",".join(["%s"] * len(deletable_ids))
+            # Reassign wiki_revisions pointing to candidates, to the newest surviving version
+            reassign_orphan_revisions(node_id, candidate_ids, keep_ids)
+            # Now delete the candidates (FK is NoAction but reassignment makes this safe)
+            del_placeholders = ",".join(["%s"] * len(candidate_ids))
             cur.execute(
                 f"DELETE FROM node_versions WHERE id IN ({del_placeholders})",
-                deletable_ids,
+                candidate_ids,
             )
             deleted = cur.rowcount
         conn.commit()
         return deleted
+
+
+def reassign_orphan_revisions(node_id: int, deleted_version_ids: list[int], canonical_version_ids: list[int]) -> int:
+    """Reassign wiki_revisions whose version_id is in `deleted_version_ids` to the most-recent
+    surviving version of the same node. `canonical_version_ids` should be ordered newest-first;
+    the first surviving entry is used as the reassignment target.
+
+    Called from the Plan 5 schema migration when wiki_revisions.version_id FK is changed from
+    Cascade to NoAction, and from `delete_old_versions` to maintain referential integrity.
+
+    Returns the number of wiki_revisions reassigned. Returns 0 (no-op) if either list is empty.
+    """
+    if not deleted_version_ids or not canonical_version_ids:
+        return 0
+    # Pick the first surviving canonical id as the reassignment target
+    target_id = canonical_version_ids[0]
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            placeholders = ",".join(["%s"] * len(deleted_version_ids))
+            cur.execute(
+                f"UPDATE wiki_revisions SET version_id = %s "
+                f"WHERE version_id IN ({placeholders})",
+                [target_id, *deleted_version_ids],
+            )
+            updated = cur.rowcount
+        conn.commit()
+        return updated
