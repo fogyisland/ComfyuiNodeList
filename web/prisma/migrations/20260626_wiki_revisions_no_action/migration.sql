@@ -24,6 +24,18 @@ WHERE nv_existing.id IS NULL
     LIMIT 1
   );
 
+-- Step 1b: Defensive cleanup — delete any wiki_revisions whose version_id
+-- points to a version that no longer exists in node_versions. In normal
+-- operation (Cascade FK active until this migration), such orphans were
+-- impossible because wiki_revisions would have been cascade-deleted with
+-- the version. This step is a defensive net for the unusual case of manual
+-- deletion or a temporarily-disabled FK — without it, orphan rows would
+-- silently survive into the NoAction-FK world as unreachable dead weight
+-- (the version they reference is gone, so the FK can never resolve them).
+DELETE wr FROM wiki_revisions wr
+LEFT JOIN node_versions nv_old ON wr.version_id = nv_old.id
+WHERE nv_old.id IS NULL;
+
 -- Step 2: Drop the existing Cascade FK
 ALTER TABLE wiki_revisions DROP FOREIGN KEY wiki_revisions_version_id_fkey;
 
