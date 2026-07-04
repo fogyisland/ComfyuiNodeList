@@ -19,30 +19,65 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
 
+    def _classify_response(self, response: httpx.Response) -> str:
+        """Return one of: 'success', 'rate_limit', 'transient_5xx', 'terminal_4xx'.
+
+        `rate_limit` is a 403/429 WITH an X-RateLimit-Reset header (transient, must wait).
+        `transient_5xx` is any 5xx (server errors are transient).
+        `terminal_4xx` is any other 4xx (404, 401, 403-without-reset, etc.) — raise immediately.
+        """
+        code = response.status_code
+        if 200 <= code < 300:
+            return "success"
+        if code in (403, 429) and "X-RateLimit-Reset" in response.headers:
+            return "rate_limit"
+        if 500 <= code < 600:
+            return "transient_5xx"
+        return "terminal_4xx"
+
     def _request_with_retry(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """Execute an HTTP request with retry for rate-limit and transient 5xx errors.
+
+        Classification (per `_classify_response`):
+        - success: return immediately
+        - rate_limit (403/429 with X-RateLimit-Reset): wait until reset, then retry up to MAX_RETRIES
+        - transient_5xx: exponential backoff (2^attempt seconds), retry up to MAX_RETRIES
+        - terminal_4xx (404, 401, 403-without-reset, etc.): raise immediately, no retry
+
+        Network errors (httpx.HTTPError) are also retried with exponential backoff.
+        """
         last_exc: Exception | None = None
         for attempt in range(self.MAX_RETRIES + 1):
             try:
                 with httpx.Client(timeout=self.timeout) as client:
                     response = client.request(method, url, headers=self._headers(), **kwargs)
-                if response.status_code == 403 or response.status_code == 429:
-                    reset = int(response.headers.get("X-RateLimit-Reset", time.time() + 60))
-                    wait = max(reset - int(time.time()), 1)
-                    if attempt < self.MAX_RETRIES:
-                        time.sleep(min(wait, 60))  # cap wait at 60s in tests
-                        continue
-                    response.raise_for_status()
-                if response.status_code >= 500 and attempt < self.MAX_RETRIES:
-                    time.sleep(2 ** attempt)
-                    continue
-                response.raise_for_status()
-                return response
             except httpx.HTTPError as e:
+                # Network-level error — retry with exponential backoff.
                 last_exc = e
                 if attempt < self.MAX_RETRIES:
                     time.sleep(2 ** attempt)
                     continue
                 raise
+            # Response received — classify it.
+            classification = self._classify_response(response)
+            if classification == "success":
+                return response
+            if classification == "terminal_4xx":
+                # Raise immediately without retrying. raise_for_status() raises
+                # HTTPStatusError which is NOT caught by the network-error handler above.
+                response.raise_for_status()
+            if classification == "rate_limit":
+                reset = int(response.headers.get("X-RateLimit-Reset", time.time() + 60))
+                wait = max(reset - int(time.time()), 1)
+                if attempt < self.MAX_RETRIES:
+                    time.sleep(min(wait, 60))  # cap wait at 60s in tests
+                    continue
+                response.raise_for_status()  # exhausted retries on rate limit
+            # transient_5xx
+            if attempt < self.MAX_RETRIES:
+                time.sleep(2 ** attempt)
+                continue
+            response.raise_for_status()  # exhausted retries on 5xx
         # Unreachable: loop always returns or raises. But be defensive.
         raise last_exc if last_exc else RuntimeError("request failed after retries")
 

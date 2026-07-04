@@ -1,3 +1,5 @@
+import time
+
 import httpx
 import pytest
 from pytest_httpx import httpx_mock
@@ -55,3 +57,83 @@ def test_retries_on_5xx_then_succeeds(httpx_mock):
     releases = client.get_releases("foo", "bar")
     assert releases[0]["tag_name"] == "v1.0.0"
     assert len(httpx_mock.get_requests()) == 2  # retried once
+
+
+def test_terminal_404_raises_immediately_no_retry(httpx_mock):
+    """A 404 (repo not found, release not found) must raise on the first attempt,
+    not retry. Saves 3 × MAX_RETRIES wasted attempts."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/releases?per_page=5",
+        status_code=404,
+    )
+    client = GitHubClient(token="t")
+    start = time.monotonic()
+    with pytest.raises(httpx.HTTPStatusError):
+        client.get_releases("foo", "bar")
+    elapsed = time.monotonic() - start
+    # Should be near-instant, not 3+ seconds of exponential backoff
+    assert elapsed < 0.5, f"404 took {elapsed:.2f}s (expected <0.5s)"
+    # Only 1 request should have been made (no retries)
+    assert len(httpx_mock.get_requests()) == 1
+
+
+def test_terminal_401_raises_immediately_no_retry(httpx_mock):
+    """A 401 (bad token) must raise on the first attempt."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/releases?per_page=5",
+        status_code=401,
+    )
+    client = GitHubClient(token="bad")
+    with pytest.raises(httpx.HTTPStatusError):
+        client.get_releases("foo", "bar")
+    assert len(httpx_mock.get_requests()) == 1
+
+
+def test_rate_limit_429_with_reset_retries(httpx_mock):
+    """A 429 with X-RateLimit-Reset in the future must retry (per spec §7.3)."""
+    future_reset = str(int(time.time()) + 2)
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/releases?per_page=5",
+        status_code=429,
+        headers={"X-RateLimit-Reset": future_reset},
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/releases?per_page=5",
+        json=[{"tag_name": "v1.0.0", "target_commitish": "x", "published_at": "2026-06-01T00:00:00Z", "tarball_url": "u"}],
+    )
+    client = GitHubClient(token="t")
+    releases = client.get_releases("foo", "bar")
+    assert len(releases) == 1
+    assert len(httpx_mock.get_requests()) == 2
+
+
+def test_rate_limit_403_with_reset_retries(httpx_mock):
+    """A 403 with X-RateLimit-Reset is also a rate limit (GitHub returns 403 for secondary rate limits)."""
+    future_reset = str(int(time.time()) + 2)
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/releases?per_page=5",
+        status_code=403,
+        headers={"X-RateLimit-Reset": future_reset},
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/releases?per_page=5",
+        json=[],
+    )
+    client = GitHubClient(token="t")
+    releases = client.get_releases("foo", "bar")
+    assert releases == []
+    assert len(httpx_mock.get_requests()) == 2
+
+
+def test_403_without_reset_header_raises_immediately(httpx_mock):
+    """A 403 without X-RateLimit-Reset (e.g., 'repo blocked' or 'token lacks access')
+    is a terminal error and should raise without retry."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/releases?per_page=5",
+        status_code=403,
+        # No X-RateLimit-Reset header
+    )
+    client = GitHubClient(token="t")
+    with pytest.raises(httpx.HTTPStatusError):
+        client.get_releases("foo", "bar")
+    assert len(httpx_mock.get_requests()) == 1

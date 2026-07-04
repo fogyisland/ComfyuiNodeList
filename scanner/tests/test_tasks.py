@@ -76,19 +76,7 @@ def test_fetch_releases_inserts_node_versions(db_eager, httpx_mock):
 
 def test_fetch_releases_records_failure_on_404(db_eager, httpx_mock):
     node_id = _insert_node(db_eager, "missing", "repo")
-    httpx_mock.add_response(
-        url="https://api.github.com/repos/missing/repo/releases?per_page=5",
-        status_code=404,
-    )
-    # Eager mode + autoretry: 4 calls (1 + 3 retries) all 404
-    httpx_mock.add_response(
-        url="https://api.github.com/repos/missing/repo/releases?per_page=5",
-        status_code=404,
-    )
-    httpx_mock.add_response(
-        url="https://api.github.com/repos/missing/repo/releases?per_page=5",
-        status_code=404,
-    )
+    # 404 is a terminal_4xx (no X-RateLimit-Reset) → 1 request, immediate failure.
     httpx_mock.add_response(
         url="https://api.github.com/repos/missing/repo/releases?per_page=5",
         status_code=404,
@@ -153,10 +141,7 @@ def test_parse_version_extracts_and_upserts(db_eager, httpx_mock):
 def test_parse_version_returns_none_on_404(db_eager, httpx_mock):
     node_id = _insert_node(db_eager, "missing", "repo")
     version_id = upsert_version(node_id, "v1.0.0", "a" * 40, datetime(2026, 6, 1, tzinfo=timezone.utc))
-    # Eager mode + autoretry: 4 calls (1 + 3 retries) all 404
-    httpx_mock.add_response(url="https://example.com/v1.0.0.tar.gz", status_code=404)
-    httpx_mock.add_response(url="https://example.com/v1.0.0.tar.gz", status_code=404)
-    httpx_mock.add_response(url="https://example.com/v1.0.0.tar.gz", status_code=404)
+    # 404 is terminal_4xx → 1 request, immediate failure.
     httpx_mock.add_response(url="https://example.com/v1.0.0.tar.gz", status_code=404)
     result = parse_version(node_id, version_id, "missing", "repo", "https://example.com/v1.0.0.tar.gz")
     assert result is None
