@@ -5,7 +5,7 @@
 - [x] Web vitest: 167/167 pass (28 test files, 0 failures)
 - [x] Web tsc: 0 errors (`tsc --noEmit` exit 0)
 - [x] Web lint: 0 new warnings (8 pre-existing Plan 2 warnings, unchanged from baseline `ab71b28`)
-- [x] Python pytest: 51/51 pass (no pre-existing DB-fixture errors; all 3 trigger-api tests + 3 is_pinned tests + 4 retry-classification tests green)
+- [x] Python pytest: 51/51 pass (no pre-existing DB-fixture errors; all 3 trigger-api tests + 3 is_pinned tests + 6 retry-classification tests green)
 - [x] Migration on fresh DB: 3 migrations applied cleanly (incl. `20260626_wiki_revisions_no_action`); `wiki_revisions_version_id_fkey` DELETE_RULE = `NO ACTION`
 - [x] Seed: 3 nodes, 4 versions, 4 raw_requirements inserted
 - [x] Dev server `GET /api/v1/nodes` on `127.0.0.1:9999`: HTTP 200, JSON list with seeded items
@@ -20,7 +20,7 @@
   - Verified in DB: `DELETE_RULE = NO ACTION` on `wiki_revisions_version_id_fkey`
   - Verified by 3 reassign tests: `test_reassign_orphan_revisions_moves_to_most_recent`, `_no_op_when_no_orphans`, `_skips_when_no_canonical` (all PASSED)
 - [x] `_request_with_retry` classifies terminal_4xx (raise) vs rate_limit (retry) vs transient_5xx (retry)
-  - Verified by 4 GitHub tests: `test_terminal_404_raises_immediately_no_retry`, `test_terminal_401_raises_immediately_no_retry`, `test_rate_limit_429_with_reset_retries`, `test_rate_limit_403_with_reset_retries`, `test_403_without_reset_header_raises_immediately`, `test_retries_on_5xx_then_succeeds` (all PASSED)
+  - Verified by 6 GitHub tests: `test_terminal_404_raises_immediately_no_retry`, `test_terminal_401_raises_immediately_no_retry`, `test_rate_limit_429_with_reset_retries`, `test_rate_limit_403_with_reset_retries`, `test_403_without_reset_header_raises_immediately`, `test_retries_on_5xx_then_succeeds` (all PASSED)
 - [x] Admin trigger route real HTTP call to trigger-api (5s timeout, 502 on failure)
   - Verified by 3 trigger-api tests: `test_trigger_api_health_endpoint`, `test_trigger_api_trigger_enqueues_task`, `test_trigger_api_returns_503_on_broker_failure` (all PASSED)
   - Verified live: dev server on :9999 can call trigger-api on :8081 and gets 200 health response
