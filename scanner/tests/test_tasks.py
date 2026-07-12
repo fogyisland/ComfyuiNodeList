@@ -21,7 +21,10 @@ from scanner.tasks.parse_version import parse_version
 
 @pytest.fixture
 def db_eager():
-    """Same as Task 4 fixture: reset DB before each test."""
+    """Reset DB before each test: drop tables, run `prisma migrate deploy`,
+    then ensure scan_failures exists. Mirrors the `db` fixture in conftest.py
+    but is local to this test module for eager-mode Celery tests."""
+    from scanner._db_fixtures import _drop_all_tables, _ensure_scan_failures
     # Locate pnpm explicitly (Windows subprocess doesn't inherit Git Bash's PATH)
     pnpm = shutil.which("pnpm")
     if pnpm is None:
@@ -33,13 +36,17 @@ def db_eager():
     env = {**os.environ, "DATABASE_URL": test_db_url}
     # Run from web/ — pnpm exec requires being inside the workspace
     web_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "web"))
+    # Drop all tables first so each test starts with a clean slate
+    _drop_all_tables(test_db_url)
     subprocess.run(
-        [pnpm, "exec", "prisma", "db", "push", "--force-reset", "--schema=prisma/schema.prisma"],
+        [pnpm, "exec", "prisma", "migrate", "deploy"],
         cwd=web_dir,
         check=True,
         capture_output=True,
         env=env,
     )
+    # Create scan_failures table (no migration file; needed by scan-failure tests)
+    _ensure_scan_failures(test_db_url)
     yield
 
 
