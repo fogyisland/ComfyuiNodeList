@@ -48,3 +48,31 @@ def db():
     # migration file (a pre-existing gap). Needed by test_record_scan_failure_inserts.
     _ensure_scan_failures(test_db_url)
     yield
+
+
+@pytest.fixture
+def db_eager():
+    """Alias for the `db` fixture — same setup, but a name that's clearer
+    when used in celery-eager-mode tests (`test_tasks.py`) and `test_github.py`."""
+    # Reuse the `db` fixture by delegating to it via pytest's request mechanism.
+    # The simplest approach: replicate the exact same setup here so the test
+    # that depends on `db_eager` does not require an additional fixture chain.
+    web_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web"))
+    pnpm = shutil.which("pnpm")
+    if pnpm is None:
+        candidate = os.path.join(os.environ.get("APPDATA", ""), "npm", "pnpm.cmd")
+        if os.path.isfile(candidate):
+            pnpm = candidate
+    assert pnpm is not None, "pnpm executable not found in PATH"
+    test_db_url = "mysql://root:Admin909217@127.0.0.1:3306/comfyui_nodes_test"
+    env = {**os.environ, "DATABASE_URL": test_db_url}
+    _drop_all_tables(test_db_url)
+    subprocess.run(
+        [pnpm, "exec", "prisma", "migrate", "deploy"],
+        cwd=web_dir,
+        check=True,
+        capture_output=True,
+        env=env,
+    )
+    _ensure_scan_failures(test_db_url)
+    yield

@@ -137,3 +137,43 @@ def test_403_without_reset_header_raises_immediately(httpx_mock):
     with pytest.raises(httpx.HTTPStatusError):
         client.get_releases("foo", "bar")
     assert len(httpx_mock.get_requests()) == 1
+
+
+def test_resolve_branch_sha_returns_cached_without_api_call(httpx_mock, db_eager):
+    """Cache hit: returns SHA from DB without making any HTTP request."""
+    from scanner.db import lookup_branch_sha, upsert_branch_sha
+    sha = "deadbeef" * 5  # 40 hex chars
+    upsert_branch_sha("foo", "bar", "main", sha)
+    # If resolve_branch_sha tries to hit the network, the absence of any
+    # httpx_mock.add_response() entry will cause the test to fail with
+    # "no response registered" or similar.
+    client = GitHubClient(token="t")
+    assert client.resolve_branch_sha("foo", "bar", "main") == sha
+    # No requests should have been made
+    assert len(httpx_mock.get_requests()) == 0
+    # Cache value unchanged
+    assert lookup_branch_sha("foo", "bar", "main") == sha
+
+
+def test_resolve_branch_sha_calls_api_on_cache_miss(httpx_mock, db_eager):
+    """Cache miss: hits git/refs/heads API, caches result, returns SHA."""
+    sha = "feedface" * 5
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/git/ref/heads/main",
+        json={"object": {"sha": sha}},
+    )
+    client = GitHubClient(token="t")
+    assert client.resolve_branch_sha("foo", "bar", "main") == sha
+    # Cache populated for next call
+    from scanner.db import lookup_branch_sha
+    assert lookup_branch_sha("foo", "bar", "main") == sha
+
+
+def test_resolve_branch_sha_returns_none_on_404(httpx_mock, db_eager):
+    """404 response (branch deleted/renamed): returns None, caller records scan_failure."""
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/git/ref/heads/main",
+        status_code=404,
+    )
+    client = GitHubClient(token="t")
+    assert client.resolve_branch_sha("foo", "bar", "main") is None
