@@ -1,6 +1,6 @@
 # ComfyUI Node Wiki
 
-公开的 ComfyUI 节点元数据 Wiki 服务。本仓库目前包含 **Plan 1 + Plan 2 + Plan 3 + Plan 4** 的实现。
+公开的 ComfyUI 节点元数据 Wiki 服务。本仓库目前包含 **Plan 1 + Plan 2 + Plan 3 + Plan 4 + Plan 5** 的实现。
 
 完整设计规格：[`docs/superpowers/specs/2026-06-21-comfyui-node-wiki-design.md`](docs/superpowers/specs/2026-06-21-comfyui-node-wiki-design.md)。
 
@@ -65,7 +65,6 @@ pnpm test:watch    # 开发期间监听模式
 
 ## 下一步
 
-- Plan 5：生产部署
 
 ## Wiki editing & admin review (Plan 2)
 
@@ -215,8 +214,25 @@ Run the web suite: `cd web && pnpm test`.
 ## Known limits (Plan 4)
 
 - **`install.py` parser is regex/AST-light.** It handles `os.system` and `subprocess.check_call/run/call` with simple `pip install` payloads, but complex multi-line constructions or `runpy`/`importlib` indirection are not extracted. Sufficient for the ~95% of ComfyUI nodes that use the standard `install.py` pattern. A full AST visitor is a follow-up.
-- **Worker-side "scan_runs polling" deferred.** The `POST /api/v1/admin/scans/trigger` web endpoint currently records the trigger and returns 200 immediately; a Plan 4 follow-up will add a worker-side poller that picks up triggers and calls `fetch_pending_nodes`. The weekly beat schedule is fully functional; manual triggers are best-effort.
 - **No `scan_failures` admin UI.** The table is populated, but there's no web page to view / retry. A follow-up plan adds a `/admin/scans` page.
-- **Celery on Windows uses `pool=solo` for dev.** Production (Plan 5) uses `pool=prefork` on Linux.
 - **Exotic PEP 440 specifiers (`~=`, `===`, `!=`) in `requirements.txt` are parsed but not visualized in conflict detection.** Plan 3's `pep440-utils.intersectRanges` does not handle these. Real-world ComfyUI node data may need this — track in Plan 4 follow-up.
-- **Out of scope (deferred plans):** production deployment / CI / monitoring / Docker Compose (Plan 5), webhook-based real-time triggering (spec §14), Plan 2's 2 deferred Important findings.
+- **Out of scope (deferred plans):** webhook-based real-time triggering (spec §14), Plan 2's 2 deferred Important findings.
+
+## Production deployment (Plan 5)
+
+Production deployment uses **direct Node.js + Python processes** supervised by systemd — no Docker. See [`deploy/README.md`](deploy/README.md) for the full runbook.
+
+### Architecture
+
+- 4 systemd services: `comfyui-web` (Next.js), `comfyui-celery-worker` (prefork, 4 procs), `comfyui-celery-beat` (weekly Mon 03:00 UTC), `comfyui-trigger-api` (Flask, localhost:8081)
+- nginx reverse-proxies HTTPS traffic to Next.js on localhost:3000
+- MySQL 8 + Redis 7 bound to localhost only
+- `npm ci` + `npm run build` for production builds (dev still uses `pnpm`)
+
+### Key files
+
+- `deploy/scripts/build-prod.sh` — idempotent production build
+- `deploy/web.env.example` / `deploy/scanner.env.example` — production env templates
+- `deploy/systemd/*.service` — 4 systemd units (not auto-installed)
+- `deploy/nginx/comfyui-node-wiki.conf` — nginx reverse proxy + TLS
+- `scanner/trigger_api.py` — Flask HTTP bridge between Next.js and Celery
