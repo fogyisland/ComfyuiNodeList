@@ -179,3 +179,51 @@ def reassign_orphan_revisions(node_id: int, deleted_version_ids: list[int], cano
             updated = cur.rowcount
         conn.commit()
         return updated
+
+
+def lookup_branch_sha(owner: str, repo: str, ref: str) -> str | None:
+    """Return cached SHA if present and <7 days old. Otherwise None.
+
+    Cache TTL matches the Celery beat weekly scan cadence — first scan misses
+    and fills, second scan (within 7d) hits, third scan (>=7d later) misses
+    and is pruned by the daily `prune_expired_resolutions_task` task.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT sha FROM gitsha_resolutions "
+                "WHERE owner=%s AND repo=%s AND ref=%s "
+                "AND resolved_at > NOW() - INTERVAL 7 DAY",
+                (owner, repo, ref),
+            )
+            row = cur.fetchone()
+    return row["sha"] if row else None
+
+
+def upsert_branch_sha(owner: str, repo: str, ref: str, sha: str) -> None:
+    """Insert or refresh cache entry. Called on successful API resolution."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO gitsha_resolutions (owner, repo, ref, sha, resolved_at) "
+                "VALUES (%s, %s, %s, %s, NOW()) "
+                "ON DUPLICATE KEY UPDATE sha=VALUES(sha), resolved_at=NOW()",
+                (owner, repo, ref, sha),
+            )
+        conn.commit()
+
+
+def prune_expired_resolutions() -> int:
+    """Delete cache entries older than 7 days. Returns count deleted.
+
+    Invoked daily by `scanner.tasks.cache.prune_expired_resolutions_task` from
+    the Celery beat schedule. Returns 0 if no rows match (the common case).
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM gitsha_resolutions WHERE resolved_at < NOW() - INTERVAL 7 DAY"
+            )
+            count = cur.rowcount
+        conn.commit()
+    return count

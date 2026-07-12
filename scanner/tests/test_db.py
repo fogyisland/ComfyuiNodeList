@@ -102,3 +102,83 @@ def test_delete_old_versions_keeps_5(db):
             row = cur.fetchone()
     # With DictCursor, COUNT(*) column name is "COUNT(*)"
     assert row["COUNT(*)"] == 5
+
+
+def test_lookup_branch_sha_returns_none_when_missing(db):
+    """No row -> returns None (cache miss)."""
+    from scanner.db import lookup_branch_sha
+    assert lookup_branch_sha("foo", "bar", "main") is None
+
+
+def test_lookup_branch_sha_returns_sha_when_fresh(db):
+    """Recently-upserted entry -> returns the SHA."""
+    from scanner.db import lookup_branch_sha, upsert_branch_sha
+    upsert_branch_sha("foo", "bar", "main", "a" * 40)
+    assert lookup_branch_sha("foo", "bar", "main") == "a" * 40
+
+
+def test_lookup_branch_sha_returns_none_when_expired(db):
+    """8-day-old entry -> returns None (stale, caller must re-resolve)."""
+    from scanner.db import get_connection, lookup_branch_sha
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO gitsha_resolutions (owner, repo, ref, sha, resolved_at) "
+                "VALUES (%s, %s, %s, %s, NOW() - INTERVAL 8 DAY)",
+                ("foo", "bar", "main", "a" * 40),
+            )
+        conn.commit()
+    assert lookup_branch_sha("foo", "bar", "main") is None
+
+
+def test_prune_expired_resolutions_removes_old_entries(db):
+    """TTL boundary: entries with resolved_at < NOW() - 7d are deleted; fresh entries kept."""
+    from scanner.db import (
+        get_connection,
+        lookup_branch_sha,
+        prune_expired_resolutions,
+        upsert_branch_sha,
+    )
+    upsert_branch_sha("foo", "bar", "main", "a" * 40)  # fresh
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO gitsha_resolutions (owner, repo, ref, sha, resolved_at) "
+                "VALUES (%s, %s, %s, %s, NOW() - INTERVAL 8 DAY)",
+                ("foo", "bar", "old-branch", "b" * 40),
+            )
+        conn.commit()
+    deleted = prune_expired_resolutions()
+    assert deleted == 1
+    assert lookup_branch_sha("foo", "bar", "old-branch") is None
+    assert lookup_branch_sha("foo", "bar", "main") == "a" * 40
+
+
+def test_upsert_branch_sha_refreshes_existing_entry(db):
+    """Calling upsert twice with same key refreshes sha and resolved_at; calling
+    with a different sha updates the existing row in place (no duplicate)."""
+    from scanner.db import get_connection, upsert_branch_sha
+    upsert_branch_sha("foo", "bar", "main", "a" * 40)
+    upsert_branch_sha("foo", "bar", "main", "b" * 40)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT sha FROM gitsha_resolutions WHERE owner=%s AND repo=%s AND ref=%s",
+                        ("foo", "bar", "main"))
+            row = cur.fetchone()
+            cur.execute("SELECT COUNT(*) AS n FROM gitsha_resolutions WHERE owner=%s AND repo=%s AND ref=%s",
+                        ("foo", "bar", "main"))
+            count = cur.fetchone()
+    assert row["sha"] == "b" * 40
+    assert count["n"] == 1
+
+
+def test_gitsha_resolutions_table_exists(db):
+    """The cache table from Task 1 must exist and have the expected columns."""
+    from scanner.db import get_connection
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s "
+                        "ORDER BY ORDINAL_POSITION", "gitsha_resolutions")
+            cols = [row["COLUMN_NAME"] for row in cur.fetchall()]
+    assert cols == ["id", "owner", "repo", "ref", "sha", "resolved_at"]
