@@ -291,3 +291,36 @@ def test_beat_schedule_contains_weekly_scan():
     assert "scan-every-week" in schedule
     entry = schedule["scan-every-week"]
     assert entry["task"] == "scanner.tasks.fetch_pending_nodes"
+
+
+def test_trigger_api_health_endpoint():
+    """The Flask app exposes /health returning 200."""
+    from scanner.trigger_api import app
+    client = app.test_client()
+    res = client.get("/health")
+    assert res.status_code == 200
+    assert res.json == {"status": "ok"}
+
+
+def test_trigger_api_trigger_enqueues_task(monkeypatch):
+    """POST /trigger-scan calls celery_app.send_task and returns 202 + task_id."""
+    from scanner import trigger_api
+    fake_result = type("FakeResult", (), {"id": "abc-123"})()
+    monkeypatch.setattr(trigger_api.celery_app, "send_task", lambda name: fake_result)
+    client = trigger_api.app.test_client()
+    res = client.post("/trigger-scan")
+    assert res.status_code == 202
+    assert res.json["status"] == "queued"
+    assert res.json["task_id"] == "abc-123"
+
+
+def test_trigger_api_returns_503_on_broker_failure(monkeypatch):
+    """If send_task raises (e.g., Redis unreachable), return 503."""
+    from scanner import trigger_api
+    def boom(name):
+        raise ConnectionError("redis down")
+    monkeypatch.setattr(trigger_api.celery_app, "send_task", boom)
+    client = trigger_api.app.test_client()
+    res = client.post("/trigger-scan")
+    assert res.status_code == 503
+    assert "broker unavailable" in res.json["error"]

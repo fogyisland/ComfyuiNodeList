@@ -2,6 +2,9 @@ import type { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/session';
 import { json, error } from '@/lib/api-helpers';
 
+const TRIGGER_API_URL = process.env.SCANNER_TRIGGER_API_URL ?? 'http://127.0.0.1:8081';
+const TRIGGER_TIMEOUT_MS = 5000;
+
 export async function POST(_req: NextRequest) {
   let user: Awaited<ReturnType<typeof requireAdmin>>;
   try {
@@ -12,8 +15,24 @@ export async function POST(_req: NextRequest) {
     if (msg === 'FORBIDDEN') return error(403, 'admin only');
     throw e;
   }
-  // TODO(plan-4-final): trigger Celery task via `fetch_pending_nodes.apply_async()`.
-  // Plan 4 ships a beat schedule (every Monday 03:00 UTC) which already triggers
-  // weekly scans; the on-demand bridge from Node.js to the Python worker is deferred.
-  return json({ status: 'queued', message: 'scan trigger recorded; worker will pick it up within 1 minute' });
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TRIGGER_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${TRIGGER_API_URL}/trigger-scan`, {
+      method: 'POST',
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      return error(502, 'trigger-api error', detail.slice(0, 500));
+    }
+    const body = (await res.json()) as { status: string; task_id?: string };
+    return json({ status: 'queued', task_id: body.task_id });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return error(502, 'trigger-api unreachable', msg);
+  } finally {
+    clearTimeout(timer);
+  }
 }

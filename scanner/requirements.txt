@@ -4,3 +4,5 @@ pymysql==1.1.1
 packaging==24.1
 redis==5.0.8
 tomli==2.0.1; python_version < "3.11"
+flask==3.0.3
+gunicorn==22.0.0
