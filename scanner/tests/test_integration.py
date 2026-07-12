@@ -20,6 +20,8 @@ import tarfile
 import pytest
 from pytest_httpx import httpx_mock
 
+from scanner._db_fixtures import _drop_all_tables, _ensure_scan_failures  # noqa: E402
+
 # Force eager mode BEFORE importing celery_app
 os.environ.setdefault("CELERY_TEST_EAGER", "1")
 os.environ.setdefault("CELERY_BROKER_URL", "memory://")
@@ -31,7 +33,13 @@ from scanner.tasks.fetch_pending_nodes import fetch_pending_nodes  # noqa: E402
 
 @pytest.fixture
 def db_eager():
-    """Reset the test DB before the test runs (same proven pattern as Task 4/5/7 fixtures)."""
+    """Reset the test DB before the test runs.
+
+    Drops all tables, runs `prisma migrate deploy`, then ensures the
+    `scan_failures` table exists (no migration file). Same pattern as
+    `scanner/tests/test_tasks.py` — works around MySQL 5.7 strict mode
+    rejecting `prisma db push --force-reset` for `DATETIME DEFAULT
+    CURRENT_TIMESTAMP` columns (Plan 5.1 fix)."""
     pnpm = shutil.which("pnpm")
     if pnpm is None:
         candidate = os.path.join(os.environ.get("APPDATA", ""), "npm", "pnpm.cmd")
@@ -41,13 +49,15 @@ def db_eager():
     test_db_url = "mysql://root:Admin909217@127.0.0.1:3306/comfyui_nodes_test"
     env = {**os.environ, "DATABASE_URL": test_db_url}
     web_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "web"))
+    _drop_all_tables(test_db_url)
     subprocess.run(
-        [pnpm, "exec", "prisma", "db", "push", "--force-reset", "--schema=prisma/schema.prisma"],
+        [pnpm, "exec", "prisma", "migrate", "deploy"],
         cwd=web_dir,
         check=True,
         capture_output=True,
         env=env,
     )
+    _ensure_scan_failures(test_db_url)
     yield
 
 
