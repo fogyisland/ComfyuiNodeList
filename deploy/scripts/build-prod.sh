@@ -9,14 +9,22 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-echo "=== [1/5] web: npm ci ==="
+# Production uses npm (not pnpm) per feedback_deploy_with_npm.md.
+# Bootstrap package-lock.json if missing — npm ci requires it (EUSAGE otherwise).
+# This only runs once per fresh clone; subsequent deploys use the committed lockfile.
 cd web
+if [[ ! -f package-lock.json ]]; then
+    echo "=== [1/6] web: bootstrap package-lock.json (npm install --package-lock-only) ==="
+    npm install --package-lock-only --no-audit --no-fund
+fi
+
+echo "=== [2/6] web: npm ci ==="
 npm ci
 
-echo "=== [2/5] web: prisma generate ==="
+echo "=== [3/6] web: prisma generate ==="
 npm run prisma:generate
 
-echo "=== [3/5] web: prisma migrate deploy ==="
+echo "=== [4/6] web: prisma migrate deploy ==="
 # Production uses 'migrate deploy' (applies pre-generated SQL, no prompts).
 # DATABASE_URL must be exported in the environment.
 if [[ -z "${DATABASE_URL:-}" ]]; then
@@ -25,10 +33,10 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
 fi
 npm run prisma:migrate:deploy
 
-echo "=== [4/5] web: next build ==="
+echo "=== [5/6] web: next build ==="
 npm run build
 
-echo "=== [5/5] scanner: pip install ==="
+echo "=== [6/6] scanner: pip install ==="
 cd "$REPO_ROOT/scanner"
 pip install --no-cache-dir -r requirements.txt
 
