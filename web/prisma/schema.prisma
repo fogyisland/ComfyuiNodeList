@@ -33,34 +33,34 @@ enum SubmissionStatus {
 }
 
 model User {
-  id           BigInt   @id @default(autoincrement())
-  github_id    BigInt   @unique
-  username     String   @db.VarChar(64)
-  email        String?  @db.VarChar(255)
-  avatar_url   String   @db.VarChar(512)
-  role         UserRole @default(user)
-  created_at   DateTime @default(now())
+  id         BigInt   @id @default(autoincrement())
+  github_id  BigInt   @unique
+  username   String   @db.VarChar(64)
+  email      String?  @db.VarChar(255)
+  avatar_url String   @db.VarChar(512)
+  role       UserRole @default(user)
+  created_at DateTime @default(now())
 
-  authored_revisions WikiRevision[] @relation("RevisionAuthor")
-  reviewed_revisions WikiRevision[] @relation("RevisionReviewer")
-  submissions        NodeSubmission[] @relation("SubmissionSubmitter")
+  authored_revisions   WikiRevision[]   @relation("RevisionAuthor")
+  reviewed_revisions   WikiRevision[]   @relation("RevisionReviewer")
+  submissions          NodeSubmission[] @relation("SubmissionSubmitter")
   reviewed_submissions NodeSubmission[] @relation("SubmissionReviewer")
 
   @@map("users")
 }
 
 model Node {
-  id            BigInt     @id @default(autoincrement())
-  github_owner  String     @db.VarChar(128)
-  github_repo   String     @db.VarChar(128)
-  name          String     @db.VarChar(255)
-  author        String     @db.VarChar(128)
-  description   String?    @db.Text
-  status        NodeStatus @default(active)
-  created_at    DateTime   @default(now())
-  updated_at    DateTime   @updatedAt
+  id           BigInt     @id @default(autoincrement())
+  github_owner String     @db.VarChar(128)
+  github_repo  String     @db.VarChar(128)
+  name         String     @db.VarChar(255)
+  author       String     @db.VarChar(128)
+  description  String?    @db.Text
+  status       NodeStatus @default(active)
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @updatedAt
 
-  versions     NodeVersion[]
+  versions      NodeVersion[]
   scan_failures ScanFailure[]
 
   @@unique([github_owner, github_repo])
@@ -76,7 +76,7 @@ model NodeVersion {
   release_date DateTime
   scanned_at   DateTime @default(now())
 
-  node             Node                  @relation(fields: [node_id], references: [id], onDelete: Cascade)
+  node             Node                @relation(fields: [node_id], references: [id], onDelete: Cascade)
   raw_requirements NodeRawRequirement?
   wiki_revisions   WikiRevision[]
 
@@ -126,14 +126,14 @@ model WikiRevision {
 }
 
 model NodeSubmission {
-  id            BigInt           @id @default(autoincrement())
-  submitter_id  BigInt
-  github_url    String           @db.VarChar(512)
-  status        SubmissionStatus @default(pending)
-  reviewer_id   BigInt?
-  review_note   String?          @db.Text
-  created_at    DateTime         @default(now())
-  reviewed_at   DateTime?
+  id           BigInt           @id @default(autoincrement())
+  submitter_id BigInt
+  github_url   String           @db.VarChar(512)
+  status       SubmissionStatus @default(pending)
+  reviewer_id  BigInt?
+  review_note  String?          @db.Text
+  created_at   DateTime         @default(now())
+  reviewed_at  DateTime?
 
   submitter User  @relation("SubmissionSubmitter", fields: [submitter_id], references: [id])
   reviewer  User? @relation("SubmissionReviewer", fields: [reviewer_id], references: [id])
@@ -154,4 +154,17 @@ model ScanFailure {
 
   @@index([node_id, occurred_at])
   @@map("scan_failures")
+}
+
+model GitShaResolution {
+  id          Int      @id @default(autoincrement())
+  owner       String   @db.VarChar(255)
+  repo        String   @db.VarChar(255)
+  ref         String   @db.VarChar(255)
+  sha         String   @db.Char(40)
+  resolved_at DateTime @default(now()) @db.DateTime
+
+  @@unique([owner, repo, ref])
+  @@index([resolved_at])
+  @@map("gitsha_resolutions")
 }
