@@ -22,11 +22,16 @@ if os.environ.get("CELERY_TEST_EAGER") == "1":
 # Auto-discover tasks
 celery_app.autodiscover_tasks(["scanner.tasks"])
 
-# Beat schedule: weekly scan every Monday 03:00 UTC (per spec §7.2)
+# Beat schedule: weekly scan every Monday 03:00 UTC (per spec §7.2),
+# plus daily prune at 04:00 UTC for gitsha_resolutions cache TTL.
 celery_app.conf.beat_schedule = {
     "scan-every-week": {
         "task": "scanner.tasks.fetch_pending_nodes",
         "schedule": crontab(hour=3, minute=0, day_of_week="monday"),
+    },
+    "prune-expired-resolutions": {
+        "task": "scanner.tasks.prune_expired_resolutions",
+        "schedule": crontab(hour=4, minute=0),
     },
 }
 celery_app.conf.timezone = "UTC"

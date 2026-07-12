@@ -403,3 +403,31 @@ def test_fetch_releases_records_scan_failure_on_unresolvable_branch(db_eager, ht
     assert row is not None
     assert "target_commitish_resolve_failed" in row["error_message"]
     assert "deleted-branch" in row["error_message"]
+
+
+def test_prune_expired_resolutions_task_deletes_old_entries(db_eager):
+    """The Celery task wrapper must call the DB helper and return the deleted count."""
+    from scanner.db import get_connection, upsert_branch_sha
+    from scanner.tasks.cache import prune_expired_resolutions_task
+
+    upsert_branch_sha("foo", "bar", "main", "a" * 40)  # fresh
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO gitsha_resolutions (owner, repo, ref, sha, resolved_at) "
+                "VALUES (%s, %s, %s, %s, NOW() - INTERVAL 8 DAY)",
+                ("foo", "bar", "old-branch", "b" * 40),
+            )
+        conn.commit()
+
+    result = prune_expired_resolutions_task()
+    assert result == 1  # one expired entry deleted
+
+
+def test_beat_schedule_contains_daily_prune_task():
+    """The Celery beat schedule must include a daily prune entry."""
+    from scanner.celery_app import celery_app
+    schedule = celery_app.conf.beat_schedule
+    assert "prune-expired-resolutions" in schedule
+    entry = schedule["prune-expired-resolutions"]
+    assert entry["task"] == "scanner.tasks.prune_expired_resolutions"
