@@ -1,0 +1,27 @@
+[Unit]
+Description=ComfyUI Node Wiki — Next.js web app
+After=network.target mysql.service redis-server.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=comfyui
+Group=comfyui
+WorkingDirectory=/opt/comfyui-node-wiki/web
+EnvironmentFile=/etc/comfyui/web.env
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=comfyui-web
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/comfyui-node-wiki
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+[Unit]
+Description=ComfyUI Node Wiki — Celery trigger API (Flask, localhost)
+After=network.target mysql.service redis-server.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=comfyui
+Group=comfyui
+WorkingDirectory=/opt/comfyui-node-wiki/scanner
+EnvironmentFile=/etc/comfyui/scanner.env
+ExecStart=/usr/bin/gunicorn \
+  --bind=${TRIGGER_API_HOST}:${TRIGGER_API_PORT} \
+  --workers=2 \
+  --access-logfile=- \
+  --error-logfile=- \
+  trigger_api:app
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=comfyui-trigger-api
+
+[Install]
+WantedBy=multi-user.target

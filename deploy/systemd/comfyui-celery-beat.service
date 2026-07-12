@@ -1,0 +1,21 @@
+[Unit]
+Description=ComfyUI Node Wiki — Celery beat scheduler (weekly scan)
+After=network.target mysql.service redis-server.service comfyui-celery-worker.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=comfyui
+Group=comfyui
+WorkingDirectory=/opt/comfyui-node-wiki
+EnvironmentFile=/etc/comfyui/scanner.env
+ExecStart=/usr/bin/celery -A scanner.celery_app:celery_app beat \
+  --loglevel=info
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=comfyui-celery-beat
+
+[Install]
+WantedBy=multi-user.target

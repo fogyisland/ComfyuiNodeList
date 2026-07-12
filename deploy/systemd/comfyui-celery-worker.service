@@ -1,0 +1,28 @@
+[Unit]
+Description=ComfyUI Node Wiki — Celery worker (prefork pool)
+After=network.target mysql.service redis-server.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=comfyui
+Group=comfyui
+WorkingDirectory=/opt/comfyui-node-wiki
+EnvironmentFile=/etc/comfyui/scanner.env
+ExecStart=/usr/bin/celery -A scanner.celery_app:celery_app worker \
+  --loglevel=info --pool=prefork --concurrency=4
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=comfyui-celery-worker
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/comfyui-node-wiki
+
+[Install]
+WantedBy=multi-user.target
