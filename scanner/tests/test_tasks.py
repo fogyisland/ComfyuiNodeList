@@ -70,15 +70,20 @@ def test_fetch_releases_inserts_node_versions(db_eager, httpx_mock):
         json=[
             {"tag_name": "v1.0.0", "target_commitish": "a" * 40, "published_at": "2026-06-01T00:00:00Z", "tarball_url": "https://example.com/v1.0.0.tar.gz"},
             {"tag_name": "v0.9.0", "target_commitish": "b" * 40, "published_at": "2026-05-01T00:00:00Z", "tarball_url": "https://example.com/v0.9.0.tar.gz"},
+            {"tag_name": "v0.8.0", "target_commitish": "develop", "published_at": "2026-04-01T00:00:00Z", "tarball_url": "https://example.com/v0.8.0.tar.gz"},
         ],
     )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/git/ref/heads/develop",
+        json={"object": {"sha": "c" * 40}},
+    )
     result = fetch_releases(node_id, "foo", "bar")
-    assert sorted(result) == sorted([1, 2])  # two version_ids
+    assert sorted(result) == sorted([1, 2, 3])  # three version_ids
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT version_tag FROM node_versions WHERE node_id = %s ORDER BY version_tag", (node_id,))
             tags = [row["version_tag"] for row in cur.fetchall()]
-    assert tags == ["v0.9.0", "v1.0.0"]
+    assert tags == ["v0.8.0", "v0.9.0", "v1.0.0"]
 
 
 def test_fetch_releases_records_failure_on_404(db_eager, httpx_mock):
@@ -331,3 +336,70 @@ def test_trigger_api_returns_503_on_broker_failure(monkeypatch):
     res = client.post("/trigger-scan")
     assert res.status_code == 503
     assert "broker unavailable" in res.json["error"]
+
+
+def test_fetch_releases_resolves_branch_name_to_sha(db_eager, httpx_mock):
+    """Release with target_commitish='main' (a branch name) must be resolved
+    to a real 40-hex SHA via git/refs/heads, NOT padded with zeros.
+
+    Regression test for Plan 5.1: before the fix, 'main' (len 4, < 7) was
+    dropped by the filter, but 'develop' (len 7) was padded to
+    'develop000...' — silently corrupting node_versions.git_sha.
+    """
+    node_id = _insert_node(db_eager, "foo", "bar")
+    real_sha = "abcdef12" * 5  # 40 hex chars
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/releases?per_page=5",
+        json=[
+            {
+                "tag_name": "v1.0.0",
+                "target_commitish": "main",  # branch name, not SHA
+                "published_at": "2026-06-01T00:00:00Z",
+                "tarball_url": "https://example.com/v1.0.0.tar.gz",
+            },
+        ],
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/git/ref/heads/main",
+        json={"object": {"sha": real_sha}},
+    )
+    result = fetch_releases(node_id, "foo", "bar")
+    assert len(result) == 1
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT git_sha FROM node_versions WHERE id = %s", (result[0],))
+            row = cur.fetchone()
+    assert row["git_sha"] == real_sha  # NOT "main00000..." or anything padded
+
+
+def test_fetch_releases_records_scan_failure_on_unresolvable_branch(db_eager, httpx_mock):
+    """When git/refs/heads returns 404 (branch renamed/deleted), the release
+    must be skipped AND a scan_failure must be recorded with a specific reason."""
+    node_id = _insert_node(db_eager, "foo", "bar")
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/releases?per_page=5",
+        json=[
+            {
+                "tag_name": "v1.0.0",
+                "target_commitish": "deleted-branch",
+                "published_at": "2026-06-01T00:00:00Z",
+                "tarball_url": "https://example.com/v1.0.0.tar.gz",
+            },
+        ],
+    )
+    httpx_mock.add_response(
+        url="https://api.github.com/repos/foo/bar/git/ref/heads/deleted-branch",
+        status_code=404,
+    )
+    result = fetch_releases(node_id, "foo", "bar")
+    assert result == []
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT error_message FROM scan_failures WHERE node_id = %s",
+                (node_id,),
+            )
+            row = cur.fetchone()
+    assert row is not None
+    assert "target_commitish_resolve_failed" in row["error_message"]
+    assert "deleted-branch" in row["error_message"]
