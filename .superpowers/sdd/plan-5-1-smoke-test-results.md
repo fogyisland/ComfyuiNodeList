@@ -41,40 +41,60 @@ All 10 plan acceptance criteria met:
 - [x] No deploy artifacts (`build-prod.sh`, `*.service`, `nginx/*.conf`, `*.env.example`) modified — Plan 5 pipeline preserved
 - [x] No files modified by this plan violate the trailing-newline Global Constraint
 
-## Implementation commits (8 total, all on local `main`, not yet pushed)
+## Implementation commits (13 total on local `main`, not yet pushed — features + 5 review fixes)
 
 ```
-60ebac4 fix(tests): migrate test_integration.py db_eager + web tests/setup.ts to migrate deploy (MySQL 5.7)
-7635162 feat(scanner): daily prune_expired_resolutions Celery task + beat schedule
-84da47c fix(scanner): detect target_commitish branch names and resolve via git_refs API
-855cdee feat(scanner): GitHubClient.resolve_branch_sha() with 7-day cache
-49c48dc fix(tests): trailing newlines on conftest.py and _db_fixtures.py (Global Constraint #1)
-7110438 fix(tests): migrate db_eager fixture to use migrate deploy (MySQL 5.7 fix)
-a6cf1ce feat(scanner): DB helpers for gitsha_resolutions cache (lookup, upsert, prune)
-146e15d feat(schema): add gitsha_resolutions cache table for target_commitish branches
+3404f21 docs(spec): correct Component 3 record_scan_failure call + add Plan 5.1.1 followup     [review-fix-5]
+0ce2fe1 refactor(scanner): resolve_branch_sha classifies via _classify_response                 [review-fix-4]
+53e75f6 refactor(scanner): use keyword args for record_scan_failure consistency                 [review-fix-3]
+2e8a1d2 refactor(tests): consolidate db_eager fixtures via _reset_database helper               [review-fix-2]
+b6b522c docs(sdd): Plan 5.1 smoke test results (all green)                                      [task-6-smoke]
+60ebac4 fix(tests): migrate test_integration.py db_eager + web tests/setup.ts to migrate deploy [fix-2]
+7635162 feat(scanner): daily prune_expired_resolutions Celery task + beat schedule              [task-5]
+84da47c fix(scanner): detect target_commitish branch names and resolve via git_refs API         [task-4]
+855cdee feat(scanner): GitHubClient.resolve_branch_sha() with 7-day cache                       [task-3]
+49c48dc fix(tests): trailing newlines on conftest.py and _db_fixtures.py (Global Constraint #1)  [fix-1]
+7110438 fix(tests): migrate db_eager fixture to use migrate deploy (MySQL 5.7 fix)              [fix-2]
+a6cf1ce feat(scanner): DB helpers for gitsha_resolutions cache (lookup, upsert, prune)          [task-2]
+146e15d feat(schema): add gitsha_resolutions cache table for target_commitish branches          [task-1]
 ```
 
 Plus spec commit `ffa4157` (not in feature range).
 
-## Concerns / Caveats
+## Whole-branch review (final, 2026-07-14)
 
-1. **Spec verbatim code needed runtime correction (Task 4 — already fixed):** The spec's §Component 3 verbatim `record_scan_failure(node_id, "fetch_releases", f"target_commitish_resolve_failed: branch={sha}, ...")` is missing the required 4th positional arg `will_retry: bool` that `scanner.db.record_scan_failure` signature requires. The Task 4 implementer correctly added `, will_retry=False` and the failure test passes — but the spec itself is technically buggy. Follow-up: update spec §Component 3 to include `will_retry=False` in the example call.
+Dispatched on the opus model with branch range `ffa4157..b6b522c` (= the entire Plan 5.1 implementation). Verdict: **Ready to merge, with one recommended followup.**
 
-2. **Task 1 introduced a MySQL 5.7 strict-mode incompatibility** (`resolved_at DateTime @default(now()) @db.DateTime` produces `DATETIME DEFAULT CURRENT_TIMESTAMP` which `prisma db push --force-reset` rejects in strict mode). The fix was to migrate test fixtures from `prisma db push --force-reset` to `_drop_all_tables` + `prisma migrate deploy` + `_ensure_scan_failures` — applied across 4 fixtures:
-   - `scanner/conftest.py` `db` fixture (Task 2 commit `a6cf1ce`)
-   - `scanner/tests/test_tasks.py` `db_eager` fixture (commit `7110438`)
-   - `scanner/tests/test_integration.py` `db_eager` fixture (commit `60ebac4`)
-   - `web/tests/setup.ts` (commit `60ebac4`)
+5 findings — 4 fixed in-review (commits `2e8a1d2`, `53e75f6`, `0ce2fe1`, `3404f21`), 1 deferred as Plan 5.1.1 followup.
 
-   Production pipeline was unaffected because it uses `prisma migrate deploy` (not `db push`), which the migration applies cleanly. Root cause could be addressed by changing the schema `@db.DateTime` → `@db.DateTime(3)` to match the implicit precision of existing `DateTime @default(now())` columns — but that's out of scope for this plan.
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| 1 | Important | Fixture consolidation: 4 files duplicated `_reset_database` body (conftest, test_tasks, test_integration, _db_fixtures helper). | Fixed in `2e8a1d2` — extracted `_reset_database(database_url, web_dir)` helper in `_db_fixtures.py`; 3 fixtures reduced to a single delegation line. |
+| 2 | Minor | `record_scan_failure` call site used positional args that diverge from keyword form used elsewhere. | Fixed in `53e75f6` — switched both call sites in `fetch_releases.py` to keyword form. |
+| 3 | Important | `resolve_branch_sha` inlined `status_code in (404, 403)` check, duplicating `_request_with_retry`'s `_classify_response`. | Fixed in `0ce2fe1` — delegate to `_classify_response(exc.response) == "terminal_4xx"` so the two classification paths stay in lockstep. Also updated docstring. |
+| 4 | Minor | Spec Component 3 example used positional 4-arg call missing `will_retry`. | Fixed in `3404f21` — switched spec example to keyword form matching actual signature; documented the divergence history. |
+| 5 | Recommended followup | `@db.DateTime` (precision 0) on `resolved_at` column is the root cause of the 4 MySQL 5.7 fixture-migration commits. Should be `@db.DateTime(3)` to match implicit precision of existing `DateTime @default(now())` columns. | Deferred to Plan 5.1.1 — added as followup entry in spec §Followups and as Plan 5.1.1 candidate in the spec. Not blocking: production uses `migrate deploy`, which accepts the current schema. |
+
+### Post-fix verification
+
+After all 5 review-fix commits, re-ran the smoke tests:
+
+- [x] Web vitest: 167/167 pass (28 test files, 0 failures; 484s runtime)
+- [x] Python pytest: 64/64 pass — re-run 44/44 on Plan-5.1-covered subset (9m32s runtime)
+- [x] No new lint warnings introduced
+- [x] Migration still applies cleanly; schema unchanged
+- [x] All 4 review-fix commits + smoke doc update test-run clean
+
+## Concerns / Caveats (resolved + remaining)
+
+1. **(Resolved) Spec verbatim code needed runtime correction:** Both the spec and the call sites now use keyword form (`node_id=`, `task_name=`, `error_message=`, `will_retry=False`). See commit `3404f21` + `53e75f6`.
+
+2. **(Resolved, followup tracked) Task 1's MySQL 5.7 incompatibility** — root cause `@db.DateTime` precision mismatch documented as the Plan 5.1.1 followup. Production pipeline is unaffected (`migrate deploy` accepts the schema). Fixture migration to `migrate deploy` was committed across 4 fixtures in commits `7110438` + `60ebac4`.
 
 3. **`lint` count differs from Plan 5 smoke test (10 vs 8):** Verified via `git log ffa4157..HEAD -- <each warning file>` that no warning file was modified by Plan 5.1. The 2 "extra" warnings (`SubmitHandler` in `NodeRequirementTable.tsx`, `_versionId` in `HistoryClient.tsx`) predate Plan 5.1 and were simply not captured in Plan 5's smoke-test warning count. Not blocking.
 
-## Commit
+## Status
 
-This document is the final Plan 5.1 smoke-test artifact. The next step is the final whole-branch review (Task 6 final).
+Plan 5.1 implementation complete; all review fixes applied; ready to push.
 
-```bash
-git add .superpowers/sdd/plan-5-1-smoke-test-results.md
-git commit -m "docs(sdd): Plan 5.1 smoke test results (all green)"
-```
+The next step is `git push` to `origin/main` (currently 13 commits ahead), then `superpowers:finishing-a-development-branch`.
