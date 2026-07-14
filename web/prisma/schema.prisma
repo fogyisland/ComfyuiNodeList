@@ -162,7 +162,7 @@ model GitShaResolution {
   repo        String   @db.VarChar(255)
   ref         String   @db.VarChar(255)
   sha         String   @db.Char(40)
-  resolved_at DateTime @default(now()) @db.DateTime
+  resolved_at DateTime @default(now()) @db.DateTime(3)
 
   @@unique([owner, repo, ref])
   @@index([resolved_at])
