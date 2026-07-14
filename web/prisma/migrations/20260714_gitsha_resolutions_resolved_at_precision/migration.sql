@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `gitsha_resolutions` MODIFY COLUMN `resolved_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3);
