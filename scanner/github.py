@@ -98,12 +98,14 @@ class GitHubClient:
 
         Returns:
             The 40-hex SHA on success (cache hit or fresh API resolution).
-            None if the branch cannot be resolved (404, 403-without-reset).
+            None if the branch cannot be resolved (any terminal 4xx: 404,
+            401, 403-without-reset, etc.). The caller (`fetch_releases`)
+            records a scan_failure with a specific reason.
 
         Raises:
-            httpx.HTTPError / httpx.HTTPStatusError: terminal 4xx (other than
-                404/403) or exhausted retries on 5xx/rate-limit. The outer
-                try/except in `fetch_releases` records these as scan failures.
+            httpx.HTTPError / httpx.HTTPStatusError: exhausted retries on
+                5xx or rate-limit. The outer try/except in `fetch_releases`
+                records these as scan failures.
         """
         from scanner.db import lookup_branch_sha, upsert_branch_sha
 
@@ -112,18 +114,21 @@ class GitHubClient:
             return cached
 
         try:
-            data = self._request_with_retry(
+            response = self._request_with_retry(
                 "GET",
                 f"{self.BASE_URL}/repos/{owner}/{repo}/git/ref/heads/{ref}",
-            ).json()
+            )
         except httpx.HTTPStatusError as exc:
-            # Terminal 4xx (per `_classify_response`): 404 (branch missing),
-            # 401 (bad token), or 403-without-reset (token lacks access).
-            # The caller records a scan_failure with a specific reason.
-            if exc.response.status_code in (404, 403):
+            # Reclassify via the same helper `_request_with_retry` uses — any
+            # terminal 4xx is an unrecoverable "unresolvable" condition, so
+            # return None to let the caller log a specific scan_failure.
+            # Rate-limit and 5xx were already retried by `_request_with_retry`
+            # and bubble up here only after MAX_RETRIES exhaustion.
+            if self._classify_response(exc.response) == "terminal_4xx":
                 return None
             raise
 
+        data = response.json()
         sha = data["object"]["sha"]
 
         # Cache write — best-effort. If the DB write fails, return the SHA
