@@ -137,9 +137,10 @@ def fetch_releases(node_id: int, owner: str, repo: str) -> list[int]:
             resolved_sha = client.resolve_branch_sha(owner, repo, sha)
             if resolved_sha is None:
                 record_scan_failure(
-                    node_id,
-                    "fetch_releases",
-                    f"target_commitish_resolve_failed: branch={sha}, owner={owner}, repo={repo}",
+                    node_id=node_id,
+                    task_name="fetch_releases",
+                    error_message=f"target_commitish_resolve_failed: branch={sha}, owner={owner}, repo={repo}",
+                    will_retry=False,
                 )
                 continue
 
@@ -389,3 +390,4 @@ Add **one** additional release entry to `test_fetch_releases_inserts_node_versio
 - Future improvement: a `/admin/cache/gitsha` UI to inspect and manually invalidate cache entries
 - Future improvement: add `gitsha_resolutions` partitioning by `resolved_at` month if table grows past ~100k rows
 - Plan 5.2+ candidate: 7 historical commits missing `Co-Authored-By` line
+- **Plan 5.1.1 candidate: schema precision fix.** `resolved_at DateTime @default(now()) @db.DateTime` produces `DATETIME DEFAULT CURRENT_TIMESTAMP` which Prisma's `db push --force-reset` rejects in MySQL 5.7 strict mode (this is the root cause of the 4 Plan 5.1 fixup commits that migrated test fixtures from `db push --force-reset` to `migrate deploy`). The clean fix is `@db.DateTime(3)` (matches implicit precision of other `DateTime @default(now())` columns). Doing it now prevents the same 4-commit cascade when anyone adds another `@default(now())` column.
