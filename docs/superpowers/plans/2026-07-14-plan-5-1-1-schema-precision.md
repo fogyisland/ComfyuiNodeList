@@ -255,16 +255,16 @@ Expected: 2 new commits on `main` (Task 1 schema + migration commit, Task 2 spec
 
 ## Acceptance criteria (whole plan)
 
-- [ ] `web/prisma/schema.prisma:165` uses `@db.DateTime(3)` (not `@db.DateTime`)
-- [ ] `web/prisma/migrations/20260714_gitsha_resolutions_resolved_at_precision/migration.sql` exists with exactly the `ALTER TABLE gitsha_resolutions MODIFY COLUMN resolved_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)` content
-- [ ] On the test DB, `prisma migrate deploy` applied the new migration and `prisma migrate status` returns "Database schema is up to date!"
-- [ ] `mysql SHOW CREATE TABLE gitsha_resolutions` shows `resolved_at datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)`
-- [ ] `prisma migrate diff --from-migrations --to-schema-datamodel` exits 0 with no SQL output (schema and migrations in sync)
-- [ ] `pytest` runs 64/64 pass
-- [ ] `pnpm test` runs 167/167 pass
-- [ ] `pnpm exec tsc --noEmit` exits 0
-- [ ] `pnpm lint` exits 0 (no new warnings)
-- [ ] `docs/superpowers/specs/2026-07-12-plan-5-1-target-commitish-resolution-design.md` §Followups entry is now marked as resolved with a date stamp
+- [x] `web/prisma/schema.prisma:165` uses `@db.DateTime(3)` (not `@db.DateTime`)
+- [x] `web/prisma/migrations/20260714_gitsha_resolutions_resolved_at_precision/migration.sql` exists with exactly the `ALTER TABLE gitsha_resolutions MODIFY COLUMN resolved_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)` content
+- [x] On the test DB, `prisma migrate deploy` applied the new migration and `prisma migrate status` returns "Database schema is up to date!"
+- [x] `mysql SHOW CREATE TABLE gitsha_resolutions` shows `resolved_at datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)`
+- [x] `prisma migrate diff --from-migrations --to-schema-datamodel` exits 0 with no SQL output (schema and migrations in sync)
+- [x] `pytest` runs 64/64 pass
+- [x] `pnpm test` runs 167/167 pass
+- [x] `pnpm exec tsc --noEmit` exits 0
+- [x] `pnpm lint` exits 0 (no new warnings)
+- [x] `docs/superpowers/specs/2026-07-12-plan-5-1-target-commitish-resolution-design.md` §Followups entry is now marked as resolved with a date stamp
 
 ## Followups (not in Plan 5.1.1)
 

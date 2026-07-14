@@ -117,14 +117,14 @@ No new tests required (no scanner or web code changes). Verification steps:
 
 ## Acceptance criteria
 
-- [ ] `web/prisma/schema.prisma:165` uses `@db.DateTime(3)` (not `@db.DateTime`)
-- [ ] `web/prisma/migrations/20260714_gitsha_resolutions_resolved_at_precision/migration.sql` exists with the expected `ALTER TABLE ... MODIFY` SQL
-- [ ] On the test DB (already at HEAD before this plan), `prisma migrate deploy` applies the new migration and `prisma migrate status` shows "Database schema is up to date!"
-- [ ] On a fresh DB, all 5 migrations apply in order and produce `DATETIME(3)` for `gitsha_resolutions.resolved_at`
-- [ ] `prisma migrate diff` between migrations directory and schema has no differences
-- [ ] All existing scanner + web tests pass
-- [ ] Plan 5.1 spec §Followups entry is updated to "Resolved by Plan 5.1.1"
-- [ ] Smoke test re-run with evidence (command + output in commit or doc)
+- [x] `web/prisma/schema.prisma:165` uses `@db.DateTime(3)` (not `@db.DateTime`)
+- [x] `web/prisma/migrations/20260714_gitsha_resolutions_resolved_at_precision/migration.sql` exists with the expected `ALTER TABLE ... MODIFY` SQL
+- [x] On the test DB (already at HEAD before this plan), `prisma migrate deploy` applies the new migration and `prisma migrate status` shows "Database schema is up to date!"
+- [x] On a fresh DB, all 5 migrations apply in order and produce `DATETIME(3)` for `gitsha_resolutions.resolved_at`
+- [x] `prisma migrate diff` between migrations directory and schema has no differences
+- [x] All existing scanner + web tests pass
+- [x] Plan 5.1 spec §Followups entry is updated to "Resolved by Plan 5.1.1"
+- [x] Smoke test re-run with evidence (command + output in commit or doc)
 
 ## Migration plan
 
