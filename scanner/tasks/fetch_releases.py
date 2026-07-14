@@ -44,7 +44,7 @@ def fetch_releases(node_id: int, owner: str, repo: str) -> list[int]:
         releases = client.get_releases(owner, repo)
     except Exception as exc:
         try:
-            record_scan_failure(node_id, "fetch_releases", str(exc), will_retry=False)
+            record_scan_failure(node_id=node_id, task_name="fetch_releases", error_message=str(exc), will_retry=False)
         except Exception:
             pass
         return []
@@ -65,10 +65,10 @@ def fetch_releases(node_id: int, owner: str, repo: str) -> list[int]:
             if resolved_sha is None:
                 try:
                     record_scan_failure(
-                        node_id,
-                        "fetch_releases",
-                        f"target_commitish_resolve_failed: branch={sha}, owner={owner}, repo={repo}",
-                        False,
+                        node_id=node_id,
+                        task_name="fetch_releases",
+                        error_message=f"target_commitish_resolve_failed: branch={sha}, owner={owner}, repo={repo}",
+                        will_retry=False,
                     )
                 except Exception:
                     pass
