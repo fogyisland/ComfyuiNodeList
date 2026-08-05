@@ -288,6 +288,6 @@ No new tests required (no scanner or web code behavior changes). Verification st
 
 ## Followups (not in Plan 5.1.2)
 
-- Plan 5.1.2 followup candidate: tighten the `Boolean @default(false)` ↔ `TINYINT(1) DEFAULT 0` mapping — Prisma emits `BOOLEAN NOT NULL DEFAULT false` in the migration but stores as `TINYINT(1) DEFAULT 0`; same semantic, slightly different DDL. Document as a known and acceptable drift, or pin in a `@db.TinyInt` annotation if explicit byte-equivalence matters.
+- ✅ **BOOLEAN↔TINYINT(1) drift closed (2026-08-05, no code change)**: investigated whether `@db.TinyInt` annotation would change Prisma's emitted DDL for the single `Boolean` column (`ScanFailure.will_retry`). It does not — `prisma migrate diff` returns `-- This is an empty migration.` with or without the annotation, because Prisma already maps `Boolean` → `tinyint(1)` for MySQL. The `BOOLEAN` keyword in the emitted migration SQL is just MySQL's documented alias for `tinyint(1)`, and the stored column type matches the schema intent. The "DDL drift" is purely cosmetic (SQL text) with no runtime effect. No fix needed; documenting as known and acceptable drift.
 - Plan 5.2 candidate: 7 historical commits missing `Co-Authored-By` line
-- Long-term: refactor `prisma/schema.prisma`'s Boolean columns to use explicit `@db.TinyInt` annotations across the board for DDL predictability
+- Long-term: if explicit byte-equivalence between emitted migration SQL and `SHOW CREATE TABLE` output ever matters, the only way to suppress the `BOOLEAN` alias is to change the column type to `Int @db.TinyInt` (or `SmallInt`), which is invasive (changes Prisma client TS types from `boolean` to `number`). Out of scope for any followup plan — this is now a permanent known-acceptable drift.
