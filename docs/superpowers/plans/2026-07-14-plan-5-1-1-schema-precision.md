@@ -268,5 +268,5 @@ Expected: 2 new commits on `main` (Task 1 schema + migration commit, Task 2 spec
 
 ## Followups (not in Plan 5.1.1)
 
-- Plan 5.1.2 candidate: add a CI smoke step that runs `prisma db push --force-reset` against an ephemeral test DB to catch precision regressions earlier
+- ✅ **Plan 5.1.2 resolved (2026-07-14, commit 2419c61):** Added the missing `scan_failures` Prisma migration. The "CI smoke" portion of this candidate was not done; fixture-vs-migration drift is now impossible by construction, but `schema.prisma`-vs-migration drift is still unguarded — the CI smoke remains a live Plan 5.2 candidate.
 - Plan 5.2 candidate: 7 historical commits missing `Co-Authored-By` line
