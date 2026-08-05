@@ -40,10 +40,7 @@ export async function setup(): Promise<void> {
       `mysql ${mysqlCreds} -e "SET FOREIGN_KEY_CHECKS=0; ${drops} SET FOREIGN_KEY_CHECKS=1;" ${db}`,
       { stdio: 'inherit' }
     );
-    execSync('pnpm exec prisma migrate deploy', {
-      env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
-      stdio: 'inherit',
-    });
+    execSync('pnpm exec prisma migrate deploy', { stdio: 'inherit' });
     pushed = true;
   }
   const prisma = new PrismaClient();
