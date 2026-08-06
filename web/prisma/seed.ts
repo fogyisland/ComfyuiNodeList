@@ -133,10 +133,23 @@ async function main() {
     }
   }
 
+  // Idempotently create system users (e.g. 'comfyui-manager' for sync attribution).
+  await prisma.user.upsert({
+    where: { username: 'comfyui-manager' },
+    update: {},
+    create: {
+      username: 'comfyui-manager',
+      avatar_url: '',
+      role: 'user',
+      // github_id, password_hash, email all default to null (Prisma nullable fields)
+    },
+  });
+
   const counts = {
     nodes: await prisma.node.count(),
     versions: await prisma.nodeVersion.count(),
     raw: await prisma.nodeRawRequirement.count(),
+    users: await prisma.user.count(),
   };
   console.log('Seed complete:', counts);
 }

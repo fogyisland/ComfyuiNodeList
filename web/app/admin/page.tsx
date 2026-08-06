@@ -2,21 +2,28 @@ import { prisma } from '@/lib/db';
 import { RevisionStatus, SubmissionStatus } from '@prisma/client';
 import { AdminDashboard } from '@/app/(admin)/_components/AdminDashboard';
 
+const MANAGER_SYSTEM_USERNAME = 'comfyui-manager';
+
 export default async function AdminDashboardPage() {
-  const [pendingRevisions, pendingSubmissions, recentRevisions, recentSubmissions] = await Promise.all([
-    prisma.wikiRevision.count({ where: { status: RevisionStatus.pending } }),
-    prisma.nodeSubmission.count({ where: { status: SubmissionStatus.pending } }),
-    prisma.wikiRevision.findMany({
-      orderBy: { created_at: 'desc' },
-      take: 5,
-      include: { author: { select: { username: true } } },
-    }),
-    prisma.nodeSubmission.findMany({
-      orderBy: { created_at: 'desc' },
-      take: 5,
-      include: { submitter: { select: { username: true } } },
-    }),
-  ]);
+  const [pendingRevisions, pendingSubmissions, recentRevisions, recentSubmissions, managerUser] =
+    await Promise.all([
+      prisma.wikiRevision.count({ where: { status: RevisionStatus.pending } }),
+      prisma.nodeSubmission.count({ where: { status: SubmissionStatus.pending } }),
+      prisma.wikiRevision.findMany({
+        orderBy: { created_at: 'desc' },
+        take: 5,
+        include: { author: { select: { username: true } } },
+      }),
+      prisma.nodeSubmission.findMany({
+        orderBy: { created_at: 'desc' },
+        take: 5,
+        include: { submitter: { select: { username: true } } },
+      }),
+      prisma.user.findUnique({
+        where: { username: MANAGER_SYSTEM_USERNAME },
+        select: { id: true },
+      }),
+    ]);
 
   const recent = [
     ...recentRevisions.map((r) => ({
@@ -40,6 +47,7 @@ export default async function AdminDashboardPage() {
       pendingRevisions={pendingRevisions}
       pendingSubmissions={pendingSubmissions}
       recent={recent}
+      managerSystemUserId={managerUser ? Number(managerUser.id) : null}
     />
   );
 }

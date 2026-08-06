@@ -1,16 +1,19 @@
 'use client';
 import Link from 'next/link';
+import { ManagerSyncButton } from './ManagerSyncButton';
 
 type Props = {
   pendingRevisions: number;
   pendingSubmissions: number;
   recent: Array<{ id: number; kind: 'revision' | 'submission'; at: string; summary: string }>;
+  managerSystemUserId: number | null;
 };
 
-export function AdminDashboard({ pendingRevisions, pendingSubmissions, recent }: Props) {
+export function AdminDashboard({ pendingRevisions, pendingSubmissions, recent, managerSystemUserId }: Props) {
   return (
     <div className="p-6">
       <h1 className="mb-4 text-2xl font-semibold">Dashboard</h1>
+      <ManagerSyncButton managerSystemUserId={managerSystemUserId} />
       <div className="mb-6 grid grid-cols-2 gap-4">
         <Link
           href="/admin/revisions"
