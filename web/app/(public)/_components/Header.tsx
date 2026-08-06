@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/session';
-import { signIn, signOut } from '@/lib/auth';
+import { signOut } from '@/lib/auth';
 
 export async function Header() {
   const user = await getCurrentUser();
@@ -18,9 +18,10 @@ export async function Header() {
               <button type="submit" className="ml-3 text-gray-700 hover:text-accent">退出</button>
             </form>
           ) : (
-            <form action={async () => { 'use server'; await signIn('github', { redirectTo: '/' }); }}>
-              <button type="submit" className="text-gray-700 hover:text-accent">用 GitHub 登录</button>
-            </form>
+            <>
+              <Link href="/login" className="text-gray-700 hover:text-accent">登录</Link>
+              <Link href="/register" className="text-gray-700 hover:text-accent">注册</Link>
+            </>
           )}
         </nav>
       </div>
