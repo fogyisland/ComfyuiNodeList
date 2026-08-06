@@ -11,7 +11,8 @@ Why a separate service (and not inlined into the worker):
 
 Endpoints:
 - POST /trigger-scan → enqueue fetch_pending_nodes, return 202 with task_id
-- GET /health       → return 200 for systemd watchdog
+- POST /trigger-manager-sync → enqueue sync_manager_catalog, return 202 with task_id
+- GET /health → return 200 for systemd watchdog
 """
 import logging
 
@@ -29,6 +30,17 @@ def trigger_scan():
     """Enqueue the weekly scan task. Returns 202 + task_id on success, 503 on broker failure."""
     try:
         async_result = celery_app.send_task("scanner.tasks.fetch_pending_nodes")
+    except Exception as exc:
+        logger.exception("send_task failed")
+        return jsonify({"error": "broker unavailable", "detail": str(exc)}), 503
+    return jsonify({"status": "queued", "task_id": async_result.id}), 202
+
+
+@app.post("/trigger-manager-sync")
+def trigger_manager_sync():
+    """Enqueue the sync_manager_catalog task. Returns 202 + task_id on success, 503 on broker failure."""
+    try:
+        async_result = celery_app.send_task("scanner.tasks.sync_manager_catalog")
     except Exception as exc:
         logger.exception("send_task failed")
         return jsonify({"error": "broker unavailable", "detail": str(exc)}), 503
