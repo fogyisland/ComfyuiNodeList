@@ -26,7 +26,7 @@
     "bcryptjs": "^3.0.3",
     "markdown-it": "^14.2.0",
     "next": "^15.0.0",
-    "next-auth": "5.0.0-beta.22",
+    "next-auth": "5.0.0-beta.32",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.80.0",
