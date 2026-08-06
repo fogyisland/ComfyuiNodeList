@@ -1,0 +1,31 @@
+{
+  "valid-node": {
+    "author": "alice",
+    "title": "Valid Node",
+    "reference": "https://github.com/alice/valid-node",
+    "id": "valid-node"
+  },
+  "no-reference": {
+    "author": "bob",
+    "title": "Missing Reference",
+    "id": "no-reference"
+  },
+  "non-github": {
+    "author": "carol",
+    "title": "GitLab Node",
+    "reference": "https://gitlab.com/carol/non-github",
+    "id": "non-github"
+  },
+  "nested-path": {
+    "author": "dave",
+    "title": "Node With Nested Path",
+    "reference": "https://github.com/dave/nested-path/tree/main",
+    "id": "nested-path"
+  },
+  "null-reference": {
+    "author": "eve",
+    "title": "Null Reference",
+    "reference": null,
+    "id": "null-reference"
+  }
+}
