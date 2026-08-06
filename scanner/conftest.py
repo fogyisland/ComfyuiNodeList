@@ -34,3 +34,26 @@ def db_eager():
     web_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web"))
     _reset_database(TEST_DB_URL, web_dir)
     yield
+
+
+@pytest.fixture
+def system_user(db_eager):
+    """Idempotently upsert the 'comfyui-manager' system user.
+
+    Mirrors what `web/prisma/seed.ts` does in dev/prod. Returns the user's id.
+    """
+    from scanner.db import get_connection
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO users (username, avatar_url, role, created_at) "
+                "VALUES ('comfyui-manager', '', 'user', NOW()) "
+                "ON DUPLICATE KEY UPDATE username = username",
+            )
+            cur.execute("SELECT id FROM users WHERE username = 'comfyui-manager'")
+            row = cur.fetchone()
+        conn.commit()
+    # DictCursor returns dict; tuple fallback for raw cursor.
+    if isinstance(row, dict):
+        return int(row["id"])
+    return int(row[0])

@@ -227,3 +227,73 @@ def prune_expired_resolutions() -> int:
             count = cur.rowcount
         conn.commit()
     return count
+
+
+
+def _parse_github_url(url: str) -> tuple[str, str] | None:
+    """Parse a GitHub repo URL into (owner_lower, repo_lower), or None if invalid.
+
+    Accepts: https://github.com/owner/repo, https://github.com/owner/repo/...
+    Ignores: fragments, query strings, case (lowercased).
+    Rejects: non-github.com hosts, empty owner/repo, fewer than 2 path segments.
+    """
+    parsed = urlparse(url)
+    if parsed.netloc.lower() != "github.com":
+        return None
+    parts = [p for p in parsed.path.split("/") if p]
+    if len(parts) < 2:
+        return None
+    return (parts[0].lower(), parts[1].lower())
+
+
+def fetch_existing_owner_repo_pairs() -> set[tuple[str, str]]:
+    """Return set of (owner_lower, repo_lower) pairs that exist in
+    `nodes` (any status) or in `node_submissions` where status='pending'.
+
+    Used by sync_manager_catalog to skip already-known entries. Approved/
+    rejected submissions are NOT included (intentional: allows re-import).
+    """
+    pairs: set[tuple[str, str]] = set()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT github_owner, github_repo FROM nodes")
+            for row in cur.fetchall():
+                pairs.add((row["github_owner"].lower(), row["github_repo"].lower()))
+            cur.execute("SELECT github_url FROM node_submissions WHERE status='pending'")
+            for row in cur.fetchall():
+                parsed = _parse_github_url(row["github_url"])
+                if parsed is not None:
+                    pairs.add(parsed)
+    return pairs
+
+
+def fetch_system_submitter_id(username: str = "comfyui-manager") -> int | None:
+    """Return users.id for the system submitter user, or None if missing.
+
+    The 'comfyui-manager' user is created by `web/prisma/seed.ts` (idempotent
+    upsert). If it's missing, sync_manager_catalog must fail-fast so admins
+    know to run `pnpm prisma:seed`.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+            row = cur.fetchone()
+    return int(row["id"]) if row else None
+
+
+def insert_pending_submission(submitter_id: int, github_url: str) -> int:
+    """INSERT one row into node_submissions (status='pending'). Returns new id.
+
+    Raises pymysql.IntegrityError on FK violation (shouldn't happen given dedup).
+    Per-row autocommit; caller decides whether to abort the loop on errors.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO node_submissions (submitter_id, github_url, status) "
+                "VALUES (%s, %s, 'pending')",
+                (submitter_id, github_url),
+            )
+            new_id = cur.lastrowid
+        conn.commit()
+        return new_id

@@ -182,3 +182,91 @@ def test_gitsha_resolutions_table_exists(db):
                         "ORDER BY ORDINAL_POSITION", "gitsha_resolutions")
             cols = [row["COLUMN_NAME"] for row in cur.fetchall()]
     assert cols == ["id", "owner", "repo", "ref", "sha", "resolved_at"]
+
+
+# --- Helpers for Manager sync tests (Task 1) ---
+
+
+def _insert_user(db, username="u", role="user"):
+    """Insert a user with no github_id / password_hash (system-style)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO users (username, avatar_url, role, created_at) "
+                "VALUES (%s, '', %s, NOW())",
+                (username, role),
+            )
+            user_id = cur.lastrowid
+        conn.commit()
+        return user_id
+
+
+# --- fetch_existing_owner_repo_pairs ---
+
+
+def test_fetch_existing_owner_repo_pairs_empty(db):
+    from scanner.db import fetch_existing_owner_repo_pairs
+    assert fetch_existing_owner_repo_pairs() == set()
+
+
+def test_fetch_existing_owner_repo_pairs_includes_nodes(db):
+    _insert_node(db, "foo", "bar", "active")
+    _insert_node(db, "BAZ", "QUX", "deprecated")  # any status counts
+    from scanner.db import fetch_existing_owner_repo_pairs
+    pairs = fetch_existing_owner_repo_pairs()
+    assert pairs == {("foo", "bar"), ("baz", "qux")}  # lowercased
+
+
+def test_fetch_existing_owner_repo_pairs_includes_pending_submissions(db):
+    from scanner.db import insert_pending_submission, fetch_existing_owner_repo_pairs
+    submitter = _insert_user(db, username="u1")
+    insert_pending_submission(submitter, "https://github.com/foo/bar")
+    pairs = fetch_existing_owner_repo_pairs()
+    assert ("foo", "bar") in pairs
+
+
+def test_fetch_existing_owner_repo_pairs_excludes_approved_submissions(db):
+    from scanner.db import insert_pending_submission, fetch_existing_owner_repo_pairs
+    submitter = _insert_user(db, username="u1")
+    new_id = insert_pending_submission(submitter, "https://github.com/foo/bar")
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE node_submissions SET status='approved' WHERE id=%s", (new_id,))
+        conn.commit()
+    assert ("foo", "bar") not in fetch_existing_owner_repo_pairs()
+
+
+# --- fetch_system_submitter_id ---
+
+
+def test_fetch_system_submitter_id_missing(db):
+    from scanner.db import fetch_system_submitter_id
+    assert fetch_system_submitter_id() is None
+
+
+def test_fetch_system_submitter_id_found(db):
+    from scanner.db import fetch_system_submitter_id
+    _insert_user(db, username="comfyui-manager")
+    uid = fetch_system_submitter_id()
+    assert uid is not None
+    assert isinstance(uid, int)
+
+
+# --- insert_pending_submission ---
+
+
+def test_insert_pending_submission_creates_pending_row(db):
+    from scanner.db import insert_pending_submission, get_connection
+    submitter = _insert_user(db, username="alice")
+    new_id = insert_pending_submission(submitter, "https://github.com/foo/bar")
+    assert new_id > 0
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT submitter_id, github_url, status FROM node_submissions WHERE id = %s",
+                (new_id,),
+            )
+            row = cur.fetchone()
+    assert row["submitter_id"] == submitter
+    assert row["github_url"] == "https://github.com/foo/bar"
+    assert row["status"] == "pending"
