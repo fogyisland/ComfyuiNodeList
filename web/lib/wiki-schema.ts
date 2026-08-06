@@ -71,6 +71,14 @@ export const ConflictCheckBody = z
   })
   .strict();
 
+export const RegisterBody = z
+  .object({
+    username: z.string().min(3).max(64).regex(/^[a-zA-Z0-9_-]+$/, 'letters, digits, _ and - only'),
+    password: z.string().min(8).max(128),
+    email: z.string().email().optional(),
+  })
+  .strict();
+
 export type CreateRevisionBody = z.infer<typeof CreateRevisionBody>;
 export type WithdrawRevisionBody = z.infer<typeof WithdrawRevisionBody>;
 export type ApproveRevisionBody = z.infer<typeof ApproveRevisionBody>;
@@ -80,3 +88,4 @@ export type RejectSubmissionBody = z.infer<typeof RejectSubmissionBody>;
 export type ChangeRoleBody = z.infer<typeof ChangeRoleBody>;
 export type ConflictDraft = z.infer<typeof ConflictDraftSchema>;
 export type ConflictCheckBody = z.infer<typeof ConflictCheckBody>;
+export type RegisterBody = z.infer<typeof RegisterBody>;

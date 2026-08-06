@@ -33,13 +33,14 @@ enum SubmissionStatus {
 }
 
 model User {
-  id         BigInt   @id @default(autoincrement())
-  github_id  BigInt   @unique
-  username   String   @db.VarChar(64)
-  email      String?  @db.VarChar(255)
-  avatar_url String   @db.VarChar(512)
-  role       UserRole @default(user)
-  created_at DateTime @default(now())
+  id            BigInt   @id @default(autoincrement())
+  github_id     BigInt?  @unique
+  username      String   @unique @db.VarChar(64)
+  email         String?  @db.VarChar(255)
+  avatar_url    String   @db.VarChar(512)
+  password_hash String?  @db.VarChar(255)
+  role          UserRole @default(user)
+  created_at    DateTime @default(now())
 
   authored_revisions   WikiRevision[]   @relation("RevisionAuthor")
   reviewed_revisions   WikiRevision[]   @relation("RevisionReviewer")

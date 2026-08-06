@@ -3,7 +3,7 @@ import { prisma } from './db';
 
 export type CurrentUser = {
   id: string;
-  githubId: string;
+  githubId: string | null;
   username: string;
   role: 'user' | 'admin';
 };
@@ -16,7 +16,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   if (!user) return null;
   return {
     id: user.id.toString(),
-    githubId: user.github_id.toString(),
+    githubId: user.github_id?.toString() ?? null,
     username: user.username,
     role: user.role,
   };
