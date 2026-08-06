@@ -4,8 +4,83 @@
 
 :root {
   color-scheme: light;
+
+  /* Surfaces */
+  --bg-canvas: #FAFBFC;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #F4F6FA;
+
+  /* Borders */
+  --border-default: #E5E9F0;
+  --border-strong: #CDD3DF;
+
+  /* Foreground */
+  --fg-primary: #0B0F1A;
+  --fg-secondary: #4A5266;
+  --fg-tertiary: #8B92A6;
+
+  /* Brand */
+  --brand-50: #EEF2FF;
+  --brand-100: #E0E7FF;
+  --brand-400: #818CF8;
+  --brand-500: #4F46E5;
+  --brand-600: #4338CA;
+  --accent-cyan: #06B6D4;
+
+  /* Semantic */
+  --success: #16A34A;
+  --warning: #D97706;
+  --danger: #DC2626;
+
+  /* Gradient & shadows */
+  --gradient-brand: linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%);
+  --shadow-sm: 0 1px 2px rgb(11 15 26 / 0.04), 0 1px 3px rgb(11 15 26 / 0.06);
+  --shadow-md: 0 4px 12px rgb(11 15 26 / 0.08), 0 1px 3px rgb(11 15 26 / 0.04);
+  --shadow-lg: 0 12px 32px rgb(11 15 26 / 0.10), 0 4px 8px rgb(11 15 26 / 0.06);
+
+  /* Spacing (4pt grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+
+  /* Radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 9999px;
+
+  /* Fonts (assigned by next/font in layout.tsx) */
+  --font-inter: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-jbmono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg-canvas: #0A0E1A;
+  --bg-surface: #121826;
+  --bg-subtle: #1A2030;
+  --border-default: #1F2937;
+  --border-strong: #374151;
+  --fg-primary: #F4F6FA;
+  --fg-secondary: #C2C9D6;
+  --fg-tertiary: #6B7388;
+  --brand-500: #818CF8;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.30);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.20);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.45), 0 4px 8px rgb(0 0 0 / 0.25);
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: var(--font-inter);
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  background: var(--bg-canvas);
+  color: var(--fg-primary);
 }
