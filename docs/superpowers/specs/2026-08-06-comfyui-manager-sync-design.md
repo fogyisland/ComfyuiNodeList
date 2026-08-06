@@ -46,12 +46,12 @@ Verbatim binding requirements — every task's requirements implicitly include t
 
 ## Architecture & Components
 
-### 5 new code blocks, 3 modified files, 3 reuse points
+### 2 new code blocks, 5 modified files, 4 reuse points
 
 | Block | Type | Responsibility |
 |---|---|---|
 | `scanner/tasks/sync_manager_catalog.py` | New Celery task | Fetch JSON → dedup → INSERT pending submissions |
-| `scanner/db.py` | Modify (+2 helpers) | `fetch_existing_owner_repo_pairs()` (set), `fetch_system_submitter_id()` (int\|None), `insert_pending_submission()` (int id) |
+| `scanner/db.py` | Modify (+3 helpers) | `fetch_existing_owner_repo_pairs()` (set), `fetch_system_submitter_id()` (int\|None), `insert_pending_submission()` (int id) |
 | `scanner/trigger_api.py` | Modify (+1 endpoint) | `POST /trigger-manager-sync` enqueues `scanner.tasks.sync_manager_catalog` |
 | `web/app/api/v1/admin/manager/sync/route.ts` | New Next route | `requireAdmin()` → 5s timeout fetch trigger_api → 202/502 |
 | `web/app/admin/_components/AdminDashboard.tsx` | Modify | Add `<ManagerSyncButton managerSystemUserId={...} />` client island |
