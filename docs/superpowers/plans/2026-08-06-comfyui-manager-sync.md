@@ -800,6 +800,61 @@ def test_partial_insert_failure(db_eager, system_user, httpx_mock, monkeypatch):
     assert result["added"] == 2
     assert len(result["errors"]) == 1
     assert result["errors"][0]["entry_id"] == "n3"
+
+
+def test_mixed_dedup(db_eager, system_user, httpx_mock):
+    """1 nodes + 1 pending + 1 fresh entry → added=1, skipped_existing=1, skipped_pending=1."""
+    _insert_node_helper(db_eager, "alpha", "node-a")
+    other = _insert_user_helper(db_eager, username="bob")
+    insert_pending_submission(other, "https://github.com/beta/node-b")
+    httpx_mock.add_response(
+        url=MANAGER_URL,
+        json={
+            "a": {"reference": "https://github.com/alpha/node-a"},  # in nodes
+            "b": {"reference": "https://github.com/beta/node-b"},  # pending
+            "c": {"reference": "https://github.com/gamma/node-c"},  # new
+        },
+    )
+    result = sync_manager_catalog()
+    assert result["added"] == 1
+    assert result["skipped_existing"] == 1
+    assert result["skipped_pending"] == 1
+
+
+def test_missing_reference_field(db_eager, system_user, httpx_mock):
+    """Entry with no `reference` key at all → skipped_invalid_url=1."""
+    httpx_mock.add_response(
+        url=MANAGER_URL,
+        json={"n1": {"author": "x", "title": "Y"}},  # no `reference` key
+    )
+    result = sync_manager_catalog()
+    assert result["status"] == "ok"
+    assert result["added"] == 0
+    assert result["skipped_invalid_url"] == 1
+
+
+def test_non_github_url(db_eager, system_user, httpx_mock):
+    """reference=https://gitlab.com/foo/bar → skipped_invalid_url=1."""
+    httpx_mock.add_response(
+        url=MANAGER_URL,
+        json={"n1": {"reference": "https://gitlab.com/foo/bar"}},
+    )
+    result = sync_manager_catalog()
+    assert result["added"] == 0
+    assert result["skipped_invalid_url"] == 1
+
+
+def test_url_with_nested_path(db_eager, system_user, httpx_mock):
+    """https://github.com/foo/bar/tree/main → parses to foo/bar (first 2 segments)."""
+    httpx_mock.add_response(
+        url=MANAGER_URL,
+        json={"n1": {"reference": "https://github.com/foo/bar/tree/main"}},
+    )
+    result = sync_manager_catalog()
+    assert result["added"] == 1
+    rows = _pending_submissions()
+    assert len(rows) == 1
+    assert rows[0]["github_url"] == "https://github.com/foo/bar"
 ```
 
 - [ ] **Step 7: Run all sync tests, confirm PASS**
@@ -843,7 +898,7 @@ In `scanner/tasks/sync_manager_catalog.py`, replace the dedup step (steps 4 + th
 ```bash
 cd scanner && pytest tests/test_sync_manager_catalog.py -v
 ```
-Expected: all 12 passed.
+Expected: all 18 passed (1 happy_path + 17 added in step 6/7 — covering every test case listed in spec §Testing Layer 1).
 
 - [ ] **Step 9: Run the full scanner test suite to confirm no regressions**
 
