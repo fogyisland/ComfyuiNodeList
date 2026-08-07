@@ -94,8 +94,8 @@ export async function approveRevision(input: ReviewActionInput): Promise<Approve
       });
       archivedIds.push(Number(existing.id));
     }
-    const updated = await tx.wikiRevision.update({
-      where: { id: target.id },
+    const updated = await tx.wikiRevision.updateMany({
+      where: { id: target.id, status: RevisionStatus.pending },
       data: {
         status: RevisionStatus.approved,
         reviewer_id: input.reviewerId,
@@ -103,9 +103,13 @@ export async function approveRevision(input: ReviewActionInput): Promise<Approve
         reviewed_at: new Date(),
       },
     });
+    if (updated.count === 0) {
+      const fresh = await tx.wikiRevision.findUnique({ where: { id: target.id } });
+      return { kind: 'not-pending' as const, status: fresh?.status };
+    }
     return {
       kind: 'ok' as const,
-      approvedRevisionId: Number(updated.id),
+      approvedRevisionId: Number(target.id),
       archivedRevisionIds: archivedIds,
     };
   });
@@ -123,11 +127,8 @@ export async function rejectRevision(
 ): Promise<RejectResult> {
   const target = await prisma.wikiRevision.findUnique({ where: { id: BigInt(input.revisionId) } });
   if (!target) return { ok: false, reason: 'not-found' };
-  if (target.status !== RevisionStatus.pending) {
-    return { ok: false, reason: 'not-pending', status: target.status };
-  }
-  await prisma.wikiRevision.update({
-    where: { id: target.id },
+  const updated = await prisma.wikiRevision.updateMany({
+    where: { id: target.id, status: RevisionStatus.pending },
     data: {
       status: RevisionStatus.rejected,
       reviewer_id: input.reviewerId,
@@ -135,5 +136,9 @@ export async function rejectRevision(
       reviewed_at: new Date(),
     },
   });
+  if (updated.count === 0) {
+    const fresh = await prisma.wikiRevision.findUnique({ where: { id: target.id } });
+    return { ok: false, reason: 'not-pending', status: fresh?.status };
+  }
   return { ok: true };
 }
