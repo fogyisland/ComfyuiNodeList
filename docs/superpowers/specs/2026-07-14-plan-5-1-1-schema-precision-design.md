@@ -42,7 +42,7 @@ Change the schema annotation from `@db.DateTime` to `@db.DateTime(3)` and add on
 **Out of scope (deferred):**
 
 - Reverting the Plan 5.1 fixture-migration cascade back to `prisma db push --force-reset` — production consistency is the goal; the migration is an improvement, not debt
-- Adding a CI smoke check that runs `db push --force-reset` — left as Plan 5.1.2
+- Adding a CI smoke check that runs `db push --force-reset` — left as Plan 5.2 candidate (Plan 5.1.2 closed the migration portion; CI smoke was deferred per Plan 5.1.2 §Out of scope)
 - Plan 5.2 (Co-Authored-By on historical commits)
 - Backfilling `resolved_at` microsecond data — table is empty in production
 
@@ -140,3 +140,4 @@ No new tests required (no scanner or web code changes). Verification steps:
 
 - ✅ **Plan 5.1.2 resolved (2026-07-14, commit 2419c61):** Added the missing `scan_failures` Prisma migration. The "CI smoke" portion of this candidate was not done; fixture-vs-migration drift is now impossible by construction, but `schema.prisma`-vs-migration drift is still unguarded — the CI smoke remains a live Plan 5.2 candidate.
 - Plan 5.2 candidate: 7 historical commits missing `Co-Authored-By` line
+- Plan 5.2 candidate: add CI smoke step that runs `prisma db push --force-reset` (per Plan 5.1.2 §Out of scope; workaround removal made this less critical but schema-vs-migration drift is still unguarded)
