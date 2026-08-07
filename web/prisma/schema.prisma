@@ -57,8 +57,9 @@ model Node {
   name         String     @db.VarChar(255)
   author       String     @db.VarChar(128)
   description  String?    @db.Text
-  status       NodeStatus @default(active)
-  created_at   DateTime   @default(now())
+  status        NodeStatus @default(active)
+  source_manager Boolean    @default(false)
+  created_at    DateTime   @default(now())
   updated_at   DateTime   @updatedAt
 
   versions      NodeVersion[]
