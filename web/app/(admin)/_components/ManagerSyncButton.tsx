@@ -40,7 +40,14 @@ export function ManagerSyncButton({ managerSystemUserId }: Props) {
         <Button onClick={onClick} disabled={disabled}>{busy ? '同步中…' : '同步 Manager 目录'}</Button>
       </div>
       {message && (
-        <div className={'mt-3 rounded-sm p-2 text-sm ' + (message.kind === 'success' ? 'bg-green-50 text-success' : 'bg-red-50 text-danger')}>
+        <div
+          className={
+            'mt-3 rounded-sm p-2 text-sm ' +
+            (message.kind === 'success'
+              ? 'bg-success/10 text-success'
+              : 'bg-danger/10 text-danger')
+          }
+        >
           {message.text}
         </div>
       )}

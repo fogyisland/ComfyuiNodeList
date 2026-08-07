@@ -29,7 +29,7 @@ function LoginForm() {
   }
 
   return (
-    <Card variant="elevated" className="mt-8">
+    <Card variant="elevated" className="mt-8 rounded-lg shadow-lg">
       <h1 className="text-display-md text-fg-primary">登录</h1>
       <p className="mt-1 text-sm text-fg-tertiary">登录后可以提交节点、编辑 wiki。</p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
@@ -53,10 +53,12 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="mx-auto max-w-md p-4 md:p-8">
-      <Suspense fallback={<Card variant="elevated" className="mt-8" aria-busy="true" />}>
-        <LoginForm />
-      </Suspense>
-    </main>
+    <div className="min-h-[calc(100vh-80px)] bg-gradient-to-br from-brand-50/40 via-canvas to-canvas">
+      <main className="mx-auto max-w-md p-4 md:p-8">
+        <Suspense fallback={<Card variant="elevated" className="mt-8 rounded-lg shadow-lg" aria-busy="true" />}>
+          <LoginForm />
+        </Suspense>
+      </main>
+    </div>
   );
 }

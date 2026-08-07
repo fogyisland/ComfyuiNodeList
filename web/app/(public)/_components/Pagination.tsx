@@ -4,11 +4,22 @@ type Props = {
   basePath: string;
   page: number;
   totalPages: number;
+  query?: Record<string, string>;
 };
 
-export function Pagination({ basePath, page, totalPages }: Props) {
+function buildHref(basePath: string, page: number, query: Record<string, string>) {
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== '') params.set(k, v);
+  }
+  const qs = params.toString();
+  return qs ? `${basePath}?${qs}` : basePath;
+}
+
+export function Pagination({ basePath, page, totalPages, query = {} }: Props) {
   if (totalPages <= 1) return null;
-  const href = (p: number) => `${basePath}?page=${p}`;
+  const href = (p: number) => buildHref(basePath, p, query);
   return (
     <nav className="mt-8 flex items-center justify-center gap-2 text-sm">
       {page > 1 && (

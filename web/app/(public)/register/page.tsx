@@ -54,54 +54,56 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md p-4 md:p-8">
-      <Card variant="elevated" className="mt-8">
-        <h1 className="text-display-md text-fg-primary">注册</h1>
-        <p className="mt-1 text-sm text-fg-tertiary">创建账号后即可提交节点。</p>
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
-          <Field label="用户名 (3-64 字符,字母/数字/_/-)" htmlFor="username">
-            <Input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              minLength={3}
-              maxLength={64}
-              pattern="[A-Za-z0-9_-]+"
-              autoComplete="username"
-            />
-          </Field>
-          <Field label="密码 (至少 8 字符)" htmlFor="password">
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              maxLength={128}
-              autoComplete="new-password"
-            />
-          </Field>
-          <Field label="邮箱 (可选)" htmlFor="email">
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-            />
-          </Field>
-          {error && <p className="text-sm text-danger">{error}</p>}
-          <Button type="submit" disabled={busy} className="w-full">
-            {busy ? '注册中…' : '注册'}
-          </Button>
-        </form>
-        <p className="mt-4 text-sm text-fg-secondary">
-          已有账号? <Link href="/login" className="text-brand-500 hover:underline">登录</Link>
-        </p>
-      </Card>
-    </main>
+    <div className="min-h-[calc(100vh-80px)] bg-gradient-to-br from-brand-50/40 via-canvas to-canvas">
+      <main className="mx-auto max-w-md p-4 md:p-8">
+        <Card variant="elevated" className="mt-8 rounded-lg shadow-lg">
+          <h1 className="text-display-md text-fg-primary">注册</h1>
+          <p className="mt-1 text-sm text-fg-tertiary">创建账号后即可提交节点。</p>
+          <form onSubmit={onSubmit} className="mt-6 space-y-4">
+            <Field label="用户名 (3-64 字符,字母/数字/_/-)" htmlFor="username">
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                minLength={3}
+                maxLength={64}
+                pattern="[A-Za-z0-9_-]+"
+                autoComplete="username"
+              />
+            </Field>
+            <Field label="密码 (至少 8 字符)" htmlFor="password">
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                maxLength={128}
+                autoComplete="new-password"
+              />
+            </Field>
+            <Field label="邮箱 (可选)" htmlFor="email">
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
+            </Field>
+            {error && <p className="text-sm text-danger">{error}</p>}
+            <Button type="submit" disabled={busy} className="w-full">
+              {busy ? '注册中…' : '注册'}
+            </Button>
+          </form>
+          <p className="mt-4 text-sm text-fg-secondary">
+            已有账号? <Link href="/login" className="text-brand-500 hover:underline">登录</Link>
+          </p>
+        </Card>
+      </main>
+    </div>
   );
 }
