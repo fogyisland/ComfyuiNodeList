@@ -44,6 +44,16 @@ export const RejectSubmissionBody = z
   .object({ review_note: reviewNote })
   .strict();
 
+export const CreateSubmissionBody = z
+  .object({
+    github_url: z.string().min(1).max(512),
+    name: z.string().trim().min(1).max(128),
+    description: z.string().min(1),
+  })
+  .strict();
+
+export type CreateSubmissionBody = z.infer<typeof CreateSubmissionBody>;
+
 export const ChangeRoleBody = z
   .object({ role: z.enum(['admin', 'user']) })
   .strict();

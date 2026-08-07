@@ -130,6 +130,8 @@ model NodeSubmission {
   id           BigInt           @id @default(autoincrement())
   submitter_id BigInt
   github_url   String           @db.VarChar(512)
+  name         String?          @db.VarChar(128)
+  description  String?          @db.Text
   status       SubmissionStatus @default(pending)
   reviewer_id  BigInt?
   review_note  String?          @db.Text
