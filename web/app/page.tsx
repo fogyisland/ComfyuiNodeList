@@ -80,6 +80,21 @@ export default async function HomePage() {
           </Card>
         ))}
       </section>
+
+      {/* Footer */}
+      <footer className="mt-16 border-t border-border-default pt-8 pb-4 text-sm text-fg-secondary">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span>© 2026 ComfyUI Node Wiki · Community data, MIT license</span>
+          <a
+            href="https://github.com/fogyisland/ComfyuiNodeList"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand-500 hover:underline"
+          >
+            GitHub →
+          </a>
+        </div>
+      </footer>
     </main>
   );
 }
