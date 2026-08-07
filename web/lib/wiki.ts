@@ -47,13 +47,14 @@ export async function withdrawRevision(input: WithdrawRevisionInput): Promise<Wi
   if (row.author_id !== input.currentUserId && !input.isAdmin) {
     return { ok: false, reason: 'forbidden' };
   }
-  if (row.status !== RevisionStatus.pending) {
-    return { ok: false, reason: 'not-pending', status: row.status };
-  }
-  await prisma.wikiRevision.update({
-    where: { id: row.id },
+  const updated = await prisma.wikiRevision.updateMany({
+    where: { id: row.id, status: RevisionStatus.pending },
     data: { status: RevisionStatus.withdrawn },
   });
+  if (updated.count === 0) {
+    const fresh = await prisma.wikiRevision.findUnique({ where: { id: row.id } });
+    return { ok: false, reason: 'not-pending', status: fresh?.status };
+  }
   return { ok: true };
 }
 
