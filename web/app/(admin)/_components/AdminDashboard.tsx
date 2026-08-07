@@ -1,6 +1,8 @@
 'use client';
 import Link from 'next/link';
 import { ManagerSyncButton } from './ManagerSyncButton';
+import { Card } from '@/app/_components/Card';
+import { Badge } from '@/app/_components/Badge';
 
 type Props = {
   pendingRevisions: number;
@@ -11,41 +13,51 @@ type Props = {
 
 export function AdminDashboard({ pendingRevisions, pendingSubmissions, recent, managerSystemUserId }: Props) {
   return (
-    <div className="p-6">
-      <h1 className="mb-4 text-2xl font-semibold">Dashboard</h1>
+    <div className="space-y-6">
+      <h1 className="text-display-md text-fg-primary">Dashboard</h1>
       <ManagerSyncButton managerSystemUserId={managerSystemUserId} />
-      <div className="mb-6 grid grid-cols-2 gap-4">
-        <Link
-          href="/admin/revisions"
-          className="rounded border border-gray-200 bg-white p-4 hover:border-blue-400"
-        >
-          <div className="text-xs text-gray-500">待审核修订</div>
-          <div className="mt-1 text-2xl font-bold">{pendingRevisions}</div>
-        </Link>
-        <Link
-          href="/admin/submissions"
-          className="rounded border border-gray-200 bg-white p-4 hover:border-blue-400"
-        >
-          <div className="text-xs text-gray-500">待审核节点收录</div>
-          <div className="mt-1 text-2xl font-bold">{pendingSubmissions}</div>
-        </Link>
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        {[
+          { href: '/admin/revisions', label: '待审核修订', value: pendingRevisions },
+          { href: '/admin/submissions', label: '待审核节点', value: pendingSubmissions },
+          { href: '/nodes', label: '本周新增', value: 0 },
+          { href: '/admin', label: '本周同步', value: 0 },
+        ].map((s) => (
+          <Link key={s.label} href={s.href}>
+            <Card>
+              <div className="text-xs uppercase tracking-wider text-fg-tertiary">{s.label}</div>
+              <div className="mt-2 text-display-md text-fg-primary">{s.value}</div>
+            </Card>
+          </Link>
+        ))}
       </div>
-      <h2 className="mb-2 text-sm font-semibold text-gray-700">最近活动</h2>
-      <ul className="divide-y divide-gray-200 rounded border border-gray-200 bg-white">
-        {recent.length === 0 ? (
-          <li className="p-3 text-sm text-gray-500">（暂无）</li>
-        ) : (
-          recent.map((r) => (
-            <li key={`${r.kind}-${r.id}`} className="flex items-center justify-between p-3 text-sm">
-              <span>
-                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">{r.kind}</span>{' '}
-                {r.summary}
-              </span>
-              <span className="text-xs text-gray-500">{r.at}</span>
-            </li>
-          ))
-        )}
-      </ul>
+      <section>
+        <h2 className="mb-3 text-display-sm text-fg-primary">最近活动</h2>
+        <Card variant="elevated" className="overflow-hidden p-0">
+          <table className="w-full text-sm">
+            <thead className="bg-subtle text-2xs uppercase tracking-wider text-fg-tertiary">
+              <tr>
+                <th className="px-4 py-3 text-left">类型</th>
+                <th className="px-4 py-3 text-left">详情</th>
+                <th className="px-4 py-3 text-right">时间</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-default">
+              {recent.length === 0 ? (
+                <tr><td colSpan={3} className="px-4 py-6 text-center text-fg-tertiary">（暂无）</td></tr>
+              ) : recent.map((r) => (
+                <tr key={`${r.kind}-${r.id}`} className="hover:bg-subtle">
+                  <td className="px-4 py-3">
+                    <Badge kind={r.kind === 'revision' ? 'info' : 'brand'}>{r.kind}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-fg-secondary">{r.summary}</td>
+                  <td className="px-4 py-3 text-right text-xs text-fg-tertiary">{r.at}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      </section>
     </div>
   );
 }

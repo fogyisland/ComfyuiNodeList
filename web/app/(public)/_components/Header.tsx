@@ -1,28 +1,55 @@
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/session';
 import { signOut } from '@/lib/auth';
+import { Logo } from '@/app/_components/Logo';
+import { ThemeToggle } from '@/app/_components/ThemeToggle';
+import { LinkButton } from '@/app/_components/Button';
 
 export async function Header() {
   const user = await getCurrentUser();
   return (
-    <header className="border-b border-gray-200 bg-white">
-      <div className="mx-auto flex max-w-5xl items-center justify-between p-4">
-        <Link href="/" className="text-lg font-bold text-accent">
-          ComfyUI Node Wiki
+    <header className="sticky top-0 z-40 border-b border-border-default bg-canvas/80 backdrop-blur">
+      <div className="mx-auto flex max-w-6xl items-center justify-between p-4">
+        <Link href="/" className="flex items-center gap-2">
+          <Logo size={28} />
+          <span className="bg-gradient-brand bg-clip-text text-lg font-bold tracking-tight text-transparent">
+            ComfyUI Wiki
+          </span>
         </Link>
-        <nav className="flex items-center gap-4 text-sm">
-          <Link href="/nodes" className="text-gray-700 hover:text-accent">节点</Link>
+        <nav className="flex items-center gap-2 text-sm">
+          <Link href="/nodes" className="px-3 py-1.5 text-fg-secondary hover:text-fg-primary">
+            节点
+          </Link>
           {user ? (
-            <form action={async () => { 'use server'; await signOut({ redirectTo: '/' }); }}>
-              <span className="text-gray-600">{user.username}</span>
-              <button type="submit" className="ml-3 text-gray-700 hover:text-accent">退出</button>
-            </form>
+            <>
+              <Link href="/my-submissions" className="px-3 py-1.5 text-fg-secondary hover:text-fg-primary">
+                我的提交
+              </Link>
+              <LinkButton href="/submit" variant="primary" size="sm">
+                提交节点
+              </LinkButton>
+              {user.role === 'admin' && (
+                <Link href="/admin" className="px-3 py-1.5 text-fg-secondary hover:text-fg-primary">
+                  管理
+                </Link>
+              )}
+              <form action={async () => { 'use server'; await signOut({ redirectTo: '/' }); }}>
+                <button className="ml-1 px-3 py-1.5 text-fg-secondary hover:text-fg-primary">
+                  退出
+                </button>
+              </form>
+            </>
           ) : (
             <>
-              <Link href="/login" className="text-gray-700 hover:text-accent">登录</Link>
-              <Link href="/register" className="text-gray-700 hover:text-accent">注册</Link>
+              <Link href="/login" className="px-3 py-1.5 text-fg-secondary hover:text-fg-primary">
+                登录
+              </Link>
+              <Link href="/register" className="px-3 py-1.5 text-fg-secondary hover:text-fg-primary">
+                注册
+              </Link>
             </>
           )}
+          <ThemeToggle />
         </nav>
       </div>
     </header>

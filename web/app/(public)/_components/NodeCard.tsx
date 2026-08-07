@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { formatDate } from '@/lib/format';
+import { Card, CardTitle, CardMeta } from '@/app/_components/Card';
 
 type Props = {
   owner: string;
@@ -12,16 +13,15 @@ type Props = {
 
 export function NodeCard({ owner, repo, name, author, description, updatedAt }: Props) {
   return (
-    <Link
-      href={`/nodes/${owner}/${repo}`}
-      className="block rounded border border-gray-200 bg-white p-4 hover:border-accent"
-    >
-      <div className="flex items-baseline justify-between">
-        <h3 className="text-lg font-semibold">{name}</h3>
-        <span className="text-xs text-gray-500">{formatDate(updatedAt)}</span>
-      </div>
-      <div className="mt-1 text-sm text-gray-500">by {author}</div>
-      {description && <p className="mt-2 text-sm text-gray-700">{description}</p>}
+    <Link href={`/nodes/${owner}/${repo}`} className="block">
+      <Card>
+        <div className="flex items-baseline justify-between">
+          <CardTitle>{name}</CardTitle>
+          <CardMeta>{formatDate(updatedAt)}</CardMeta>
+        </div>
+        <div className="mt-1 text-sm text-fg-tertiary">by {author}</div>
+        {description && <p className="mt-2 text-sm text-fg-secondary">{description}</p>}
+      </Card>
     </Link>
   );
 }

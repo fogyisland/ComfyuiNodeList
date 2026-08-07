@@ -1,30 +1,27 @@
 import Link from 'next/link';
 
 type Props = {
-  page: number;
-  pageSize: number;
-  total: number;
   basePath: string;
-  extraQuery?: Record<string, string | undefined>;
+  page: number;
+  totalPages: number;
 };
 
-export function Pagination({ page, pageSize, total, basePath, extraQuery = {} }: Props) {
-  const lastPage = Math.max(1, Math.ceil(total / pageSize));
-  if (lastPage <= 1) return null;
-  const link = (p: number) => {
-    const params = new URLSearchParams({ page: String(p), page_size: String(pageSize) });
-    for (const [k, v] of Object.entries(extraQuery)) {
-      if (v) params.set(k, v);
-    }
-    return `${basePath}?${params.toString()}`;
-  };
+export function Pagination({ basePath, page, totalPages }: Props) {
+  if (totalPages <= 1) return null;
+  const href = (p: number) => `${basePath}?page=${p}`;
   return (
-    <nav className="flex items-center justify-between border-t border-gray-200 pt-4 text-sm">
-      <span className="text-gray-500">第 {page} / {lastPage} 页 · 共 {total} 条</span>
-      <div className="flex gap-2">
-        {page > 1 && <Link href={link(page - 1)} className="text-accent hover:underline">上一页</Link>}
-        {page < lastPage && <Link href={link(page + 1)} className="text-accent hover:underline">下一页</Link>}
-      </div>
+    <nav className="mt-8 flex items-center justify-center gap-2 text-sm">
+      {page > 1 && (
+        <Link href={href(page - 1)} className="rounded-sm border border-border-default bg-surface px-3 py-1.5 text-fg-secondary hover:border-border-strong">
+          ← 上一页
+        </Link>
+      )}
+      <span className="px-3 py-1.5 text-fg-tertiary">第 {page} / {totalPages} 页</span>
+      {page < totalPages && (
+        <Link href={href(page + 1)} className="rounded-sm border border-border-default bg-surface px-3 py-1.5 text-fg-secondary hover:border-border-strong">
+          下一页 →
+        </Link>
+      )}
     </nav>
   );
 }
