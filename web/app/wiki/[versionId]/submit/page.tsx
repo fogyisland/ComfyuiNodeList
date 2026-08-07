@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { requireUser } from '@/lib/session';
 import { confirmSubmit } from '@/app/wiki/[versionId]/_actions';
 
 type Props = {
@@ -12,6 +13,11 @@ function b64Decode(s: string): string {
 
 export default async function SubmitConfirmPage({ params, searchParams }: Props) {
   const { versionId } = await params;
+  try {
+    await requireUser();
+  } catch {
+    redirect(`/login?callbackUrl=/wiki/${versionId}/submit`);
+  }
   const { d } = await searchParams;
   if (!d) redirect(`/wiki/${versionId}`);
   let parsed: unknown;
