@@ -1,11 +1,8 @@
 import { prisma } from './db';
 import { SubmissionStatus } from '@prisma/client';
+import { parseGithubUrl } from './parse-github-url';
 
-export function parseGithubUrl(url: string): { owner: string; repo: string } | null {
-  const m = url.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
-  if (!m) return null;
-  return { owner: m[1]!, repo: m[2]! };
-}
+export { parseGithubUrl };
 
 export type CreateSubmissionInput = {
   github_url: string;

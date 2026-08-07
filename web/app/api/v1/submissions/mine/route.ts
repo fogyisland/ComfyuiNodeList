@@ -1,8 +1,9 @@
+import type { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
 import { json, error } from '@/lib/api-helpers';
 import { prisma } from '@/lib/db';
 
-export async function GET() {
+export async function GET(_req: NextRequest) {
   const session = await auth();
   const id = (session?.user as { id?: string } | undefined)?.id;
   if (!id) return error(401, 'unauthenticated');

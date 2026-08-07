@@ -1,11 +1,6 @@
 import { prisma } from './db';
 import { SubmissionStatus, NodeStatus } from '@prisma/client';
-
-function parseGithubUrl(url: string): { owner: string; repo: string } | null {
-  const m = url.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
-  if (!m) return null;
-  return { owner: m[1]!, repo: m[2]! };
-}
+import { parseGithubUrl } from './parse-github-url';
 
 export type SubmissionApproveResult =
   | { ok: true; submissionId: number; nodeId: number }
