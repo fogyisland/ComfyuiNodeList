@@ -18,6 +18,7 @@ type Row = {
   review_note: string | null;
   created_at: string;
   reviewed_at: string | null;
+  reviewer_username: string | null;
 };
 
 type Filter = 'all' | Status;
@@ -112,7 +113,10 @@ export function MySubmissionsList() {
                     <div className="mt-1 truncate font-mono text-xs text-fg-tertiary">{r.github_url}</div>
                     <div className="mt-1 text-xs text-fg-tertiary">提交于 {formatTime(r.created_at)}</div>
                     {r.status === 'approved' && r.reviewed_at && (
-                      <div className="mt-1 text-xs text-fg-tertiary">通过于 {formatTime(r.reviewed_at)}</div>
+                      <div className="mt-1 text-xs text-fg-tertiary">
+                        通过于 {formatTime(r.reviewed_at)}
+                        {r.reviewer_username && <> · 审核人 {r.reviewer_username}</>}
+                      </div>
                     )}
                     {r.status === 'rejected' && r.review_note && (
                       <details className="mt-2 rounded-sm bg-tint-danger p-2 text-xs text-danger">

@@ -35,4 +35,35 @@ describe('GET /api/v1/submissions/mine', () => {
     expect(body).toHaveLength(1);
     expect(body[0].github_url).toBe('https://github.com/me/one');
   });
+
+  it('includes reviewer_username when a reviewer is attached', async () => {
+    const me = await makeUser(1n);
+    const reviewer = await makeUser(2n);
+    await prisma.nodeSubmission.create({
+      data: {
+        submitter_id: me.id,
+        github_url: 'https://github.com/me/reviewed',
+        name: 'reviewed',
+        description: '',
+        status: 'approved',
+        reviewer_id: reviewer.id,
+        reviewed_at: new Date('2026-08-05T10:00:00.000Z'),
+      },
+    });
+    authMock.mockResolvedValue({ user: { id: me.id.toString(), role: 'user' } });
+    const res = await GET(new NextRequest('http://x'));
+    const body = await res.json();
+    expect(body[0].reviewer_username).toBe('u2');
+  });
+
+  it('returns reviewer_username: null for an unreviewed submission', async () => {
+    const me = await makeUser(1n);
+    await prisma.nodeSubmission.create({
+      data: { submitter_id: me.id, github_url: 'https://github.com/me/pending', name: 'pending', description: '' },
+    });
+    authMock.mockResolvedValue({ user: { id: me.id.toString(), role: 'user' } });
+    const res = await GET(new NextRequest('http://x'));
+    const body = await res.json();
+    expect(body[0].reviewer_username).toBeNull();
+  });
 });
