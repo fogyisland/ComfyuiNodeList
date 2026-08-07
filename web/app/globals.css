@@ -32,6 +32,12 @@
   --warning: #D97706;
   --danger: #DC2626;
 
+  /* Tinted semantic backgrounds (used for banners / toasts / soft chips) */
+  --bg-success: #DCFCE7; /* green-100 */
+  --bg-warning: #FEF3C7; /* amber-100 */
+  --bg-danger:  #FEE2E2; /* red-100 */
+  --bg-info:    #CFFAFE; /* cyan-100 */
+
   /* Gradient & shadows */
   --gradient-brand: linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%);
   --shadow-sm: 0 1px 2px rgb(11 15 26 / 0.04), 0 1px 3px rgb(11 15 26 / 0.06);
@@ -76,6 +82,12 @@
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.30);
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.20);
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.45), 0 4px 8px rgb(0 0 0 / 0.25);
+
+  /* Dark mode tints — deep desaturated variants of the light tints */
+  --bg-success: #052E16;
+  --bg-warning: #451A03;
+  --bg-danger:  #450A0A;
+  --bg-info:    #083344;
 }
 
 body {

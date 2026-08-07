@@ -32,6 +32,12 @@ const config: Config = {
         success: 'var(--success)',
         warning: 'var(--warning)',
         danger: 'var(--danger)',
+        tint: {
+          success: 'var(--bg-success)',
+          warning: 'var(--bg-warning)',
+          danger: 'var(--bg-danger)',
+          info: 'var(--bg-info)',
+        },
       },
       backgroundImage: {
         'gradient-brand': 'var(--gradient-brand)',

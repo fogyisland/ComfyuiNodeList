@@ -44,8 +44,8 @@ export function ManagerSyncButton({ managerSystemUserId }: Props) {
           className={
             'mt-3 rounded-sm p-2 text-sm ' +
             (message.kind === 'success'
-              ? 'bg-success/10 text-success'
-              : 'bg-danger/10 text-danger')
+              ? 'bg-tint-success text-success'
+              : 'bg-tint-danger text-danger')
           }
         >
           {message.text}
