@@ -366,6 +366,9 @@ function diffField(field, before, after): FieldDiff | null {
 | 乐观更新冲突(同一 revision 已被并发批准) | 409 | 列表自动刷新,toast 提示"已被其他人处理" |
 | Tiptap 输出 markdown 超 64KB | 400 | 编辑器下方提示"内容超长" |
 
+**已实现 (commits 5b583c2 / 5b0fd09):** TOCTOU in withdraw/reject/approve closed via `updateMany` 原子条件更新。详见 `docs/superpowers/specs/2026-08-07-plan-2-hardening-design.md`。
+**API 行为不变 (deferred 修复不影响 contract):** 修复后的 `withdrawRevision` / `rejectRevision` / `approveRevision` 返回类型与 HTTP 状态码不变。
+
 ## 11. 测试策略
 
 - **单元测试**(Vitest):
@@ -426,6 +429,8 @@ function diffField(field, before, after): FieldDiff | null {
 - [ ] 所有 wiki POST API 检查 `requireUser()`
 - [ ] 提交修订时 zod 拒绝超大 payload(>1MB)
 - [ ] author_id 强制绑定 session.user,禁止客户端覆盖
+
+**已实现 (commit 7ce611f):** `/wiki/[versionId]/submit` page-level `requireUser()` gate added.
 
 ## 14. 任务分解(25 任务)
 
