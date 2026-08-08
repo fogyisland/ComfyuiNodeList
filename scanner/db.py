@@ -281,8 +281,16 @@ def fetch_system_submitter_id(username: str = "comfyui-manager") -> int | None:
     return int(row["id"]) if row else None
 
 
-def insert_pending_submission(submitter_id: int, github_url: str) -> int:
+def insert_pending_submission(
+    submitter_id: int,
+    github_url: str,
+    name: str | None = None,
+    description: str | None = None,
+) -> int:
     """INSERT one row into node_submissions (status='pending'). Returns new id.
+
+    `name`/`description` are optional kwargs — when omitted (None), the DB columns
+    remain NULL. Both columns are nullable in the schema.
 
     Raises pymysql.IntegrityError on FK violation (shouldn't happen given dedup).
     Per-row autocommit; caller decides whether to abort the loop on errors.
@@ -290,10 +298,40 @@ def insert_pending_submission(submitter_id: int, github_url: str) -> int:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO node_submissions (submitter_id, github_url, status) "
-                "VALUES (%s, %s, 'pending')",
-                (submitter_id, github_url),
+                "INSERT INTO node_submissions (submitter_id, github_url, name, description, status) "
+                "VALUES (%s, %s, %s, %s, 'pending')",
+                (submitter_id, github_url, name, description),
             )
             new_id = cur.lastrowid
         conn.commit()
         return new_id
+
+
+def update_node_from_manager(
+    owner: str,
+    repo: str,
+    name: str | None = None,
+    description: str | None = None,
+    author: str | None = None,
+) -> int:
+    """UPDATE nodes SET source_manager=true, name=COALESCE(...), description=COALESCE(...),
+    author=COALESCE(...) WHERE LOWER(github_owner)=LOWER(%s) AND LOWER(github_repo)=LOWER(%s).
+
+    Returns rows affected (idempotent — re-running with same values touches no rows).
+    COALESCE preserves existing column values when the corresponding Manager JSON
+    field is missing/None. Owner/repo matching is case-insensitive.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE nodes "
+                "SET source_manager = true, "
+                "    name = COALESCE(%s, name), "
+                "    description = COALESCE(%s, description), "
+                "    author = COALESCE(%s, author) "
+                "WHERE LOWER(github_owner) = LOWER(%s) AND LOWER(github_repo) = LOWER(%s)",
+                (name, description, author, owner, repo),
+            )
+            affected = cur.rowcount
+        conn.commit()
+    return affected

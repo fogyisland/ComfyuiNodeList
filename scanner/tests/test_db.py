@@ -270,3 +270,122 @@ def test_insert_pending_submission_creates_pending_row(db):
     assert row["submitter_id"] == submitter
     assert row["github_url"] == "https://github.com/foo/bar"
     assert row["status"] == "pending"
+
+
+# --- insert_pending_submission name/description kwargs (Task 2) ---
+
+
+def test_insert_pending_submission_with_name_and_description(db):
+    """New signature accepts optional name/description kwargs."""
+    from scanner.db import insert_pending_submission
+    submitter = _insert_user(db, username="alice")
+    new_id = insert_pending_submission(
+        submitter,
+        "https://github.com/foo/bar",
+        name="Foo Title",
+        description="Foo description",
+    )
+    assert isinstance(new_id, int) and new_id > 0
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name, description FROM node_submissions WHERE id = %s", (new_id,))
+            row = cur.fetchone()
+    assert row["name"] == "Foo Title"
+    assert row["description"] == "Foo description"
+
+
+def test_insert_pending_submission_without_name_description(db):
+    """When name/description omitted, columns are NULL (existing default behavior)."""
+    from scanner.db import insert_pending_submission
+    submitter = _insert_user(db, username="bob")
+    new_id = insert_pending_submission(submitter, "https://github.com/baz/qux")
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name, description FROM node_submissions WHERE id = %s", (new_id,))
+            row = cur.fetchone()
+    assert row["name"] is None
+    assert row["description"] is None
+
+
+# --- update_node_from_manager (Task 2) ---
+
+
+def test_update_node_from_manager_sets_source_manager_and_fields(db):
+    """Helper sets source_manager=true and overrides name/description/author."""
+    from scanner.db import update_node_from_manager
+    # Pre-seed a node
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO nodes (github_owner, github_repo, name, author, description, source_manager, created_at, updated_at) "
+                "VALUES (%s, %s, %s, %s, %s, false, NOW(), NOW())",
+                ("foo", "bar", "OldName", "OldAuthor", "OldDesc"),
+            )
+        conn.commit()
+    # Run the helper
+    affected = update_node_from_manager(
+        "foo", "bar", name="NewName", description="NewDesc", author="NewAuthor"
+    )
+    assert affected == 1
+    # Verify post-state
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT name, author, description, source_manager FROM nodes "
+                "WHERE github_owner='foo' AND github_repo='bar'"
+            )
+            row = cur.fetchone()
+    assert row["name"] == "NewName"
+    assert row["author"] == "NewAuthor"
+    assert row["description"] == "NewDesc"
+    # pymysql returns TINYINT(1) BOOLEAN columns as int 0/1, not Python bool
+    assert row["source_manager"] == 1
+
+
+def test_update_node_from_manager_coalesce_preserves_existing(db):
+    """When Manager kwargs are None, COALESCE preserves existing DB values."""
+    from scanner.db import update_node_from_manager
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO nodes (github_owner, github_repo, name, author, description, source_manager, created_at, updated_at) "
+                "VALUES (%s, %s, %s, %s, %s, false, NOW(), NOW())",
+                ("x", "y", "ExistingName", "ExistingAuthor", "ExistingDesc"),
+            )
+        conn.commit()
+    affected = update_node_from_manager("x", "y")  # all kwargs None
+    assert affected == 1
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT name, author, description, source_manager FROM nodes "
+                "WHERE github_owner='x' AND github_repo='y'"
+            )
+            row = cur.fetchone()
+    assert row["name"] == "ExistingName"
+    assert row["author"] == "ExistingAuthor"
+    assert row["description"] == "ExistingDesc"
+    # pymysql returns TINYINT(1) BOOLEAN columns as int 0/1, not Python bool
+    assert row["source_manager"] == 1  # still flipped even when fields None
+
+
+def test_update_node_from_manager_case_insensitive_match(db):
+    """Owner/repo matching uses LOWER() on both sides."""
+    from scanner.db import update_node_from_manager
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO nodes (github_owner, github_repo, name, author, description, source_manager, created_at, updated_at) "
+                "VALUES (%s, %s, %s, %s, %s, false, NOW(), NOW())",
+                ("Foo", "Bar", "n", "a", "d"),
+            )
+        conn.commit()
+    affected = update_node_from_manager("FOO", "BAR", name="Updated")
+    assert affected == 1
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT name FROM nodes WHERE LOWER(github_owner)='foo' AND LOWER(github_repo)='bar'"
+            )
+            row = cur.fetchone()
+    assert row["name"] == "Updated"
