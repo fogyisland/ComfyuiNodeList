@@ -354,3 +354,22 @@ def test_update_node_failure_appends_to_errors(db_eager, system_user, httpx_mock
     assert result["status"] == "ok"
     assert len(result["errors"]) == 1
     assert "simulated DB blip" in result["errors"][0]["error"]
+
+
+def test_beat_schedule_contains_sync_manager_catalog_daily():
+    schedule = celery_app.conf.beat_schedule
+    assert "sync-manager-catalog-daily" in schedule, \
+        f"missing daily beat entry; existing keys: {list(schedule)}"
+    entry = schedule["sync-manager-catalog-daily"]
+    assert entry["task"] == "scanner.tasks.sync_manager_catalog"
+
+
+def test_beat_schedule_daily_at_05_00_utc():
+    from datetime import datetime, timezone
+    from celery.schedules import crontab
+    entry = celery_app.conf.beat_schedule["sync-manager-catalog-daily"]
+    sched = entry["schedule"]
+    assert isinstance(sched, crontab)
+    # crontab._orig_minute / _orig_hour are the raw cron fields
+    assert sched.hour == {5}, f"expected hour=5 UTC, got {sched.hour}"
+    assert sched.minute == {0}, f"expected minute=0, got {sched.minute}"

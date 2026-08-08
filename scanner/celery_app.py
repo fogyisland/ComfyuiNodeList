@@ -23,7 +23,8 @@ if os.environ.get("CELERY_TEST_EAGER") == "1":
 celery_app.autodiscover_tasks(["scanner.tasks"])
 
 # Beat schedule: weekly scan every Monday 03:00 UTC (per spec §7.2),
-# plus daily prune at 04:00 UTC for gitsha_resolutions cache TTL.
+# plus daily prune at 04:00 UTC for gitsha_resolutions cache TTL,
+# plus daily sync of ComfyUI-Manager catalog at 05:00 UTC.
 celery_app.conf.beat_schedule = {
     "scan-every-week": {
         "task": "scanner.tasks.fetch_pending_nodes",
@@ -32,6 +33,10 @@ celery_app.conf.beat_schedule = {
     "prune-expired-resolutions": {
         "task": "scanner.tasks.prune_expired_resolutions",
         "schedule": crontab(hour=4, minute=0),
+    },
+    "sync-manager-catalog-daily": {
+        "task": "scanner.tasks.sync_manager_catalog",
+        "schedule": crontab(hour=5, minute=0),
     },
 }
 celery_app.conf.timezone = "UTC"
