@@ -17,6 +17,7 @@ from scanner.db import (
     fetch_existing_owner_repo_pairs,
     fetch_system_submitter_id,
     insert_pending_submission,
+    update_node_from_manager,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ def sync_manager_catalog() -> dict:
         "skipped_existing": 0,
         "skipped_pending": 0,
         "skipped_invalid_url": 0,
+        "updated_nodes": 0,
         "errors": [],
     }
 
@@ -63,14 +65,17 @@ def sync_manager_catalog() -> dict:
     counts["fetched"] = len(catalog)
 
     # Step 3: Parse each entry's reference URL
-    parsed_entries: list[tuple[str, str, str]] = []  # (entry_id, owner, repo)
+    parsed_entries: list[tuple[str, str, str, str | None, str | None, str | None]] = []  # (entry_id, owner, repo, title, description, author)
     for entry_id, entry in catalog.items():
         ref = entry.get("reference") if isinstance(entry, dict) else None
         parsed = _parse_github_url(ref) if isinstance(ref, str) and ref else None
         if parsed is None:
             counts["skipped_invalid_url"] += 1
             continue
-        parsed_entries.append((entry_id, parsed[0], parsed[1]))
+        title = entry.get("title") if isinstance(entry, dict) else None
+        description = entry.get("description") if isinstance(entry, dict) else None
+        author = entry.get("author") if isinstance(entry, dict) else None
+        parsed_entries.append((entry_id, parsed[0], parsed[1], title, description, author))
 
     # Step 4: Dedup — split between nodes (skipped_existing) and pending submissions (skipped_pending).
     try:
@@ -84,8 +89,8 @@ def sync_manager_catalog() -> dict:
         logger.exception("dedup query failed")
         return {"status": "failed", "stage": "dedup", "error": str(exc)}
 
-    new_entries: list[tuple[str, str, str]] = []
-    for entry_id, owner, repo in parsed_entries:
+    new_entries: list[tuple[str, str, str, str | None, str | None, str | None]] = []
+    for entry_id, owner, repo, title, description, author in parsed_entries:
         pair = (owner, repo)
         if pair in existing:
             if pair in node_pairs:
@@ -93,7 +98,7 @@ def sync_manager_catalog() -> dict:
             else:
                 counts["skipped_pending"] += 1
         else:
-            new_entries.append((entry_id, owner, repo))
+            new_entries.append((entry_id, owner, repo, title, description, author))
 
     # Step 5: Look up system user
     submitter_id = fetch_system_submitter_id()
@@ -105,13 +110,23 @@ def sync_manager_catalog() -> dict:
         }
 
     # Step 6: INSERT each new entry
-    for entry_id, owner, repo in new_entries:
+    for entry_id, owner, repo, title, description, author in new_entries:
         url = f"https://github.com/{owner}/{repo}"
         try:
-            insert_pending_submission(submitter_id, url)
+            insert_pending_submission(submitter_id, url, name=title, description=description)
             counts["added"] += 1
         except Exception as exc:
             logger.warning("insert failed for %s: %s", entry_id, exc)
             counts["errors"].append({"entry_id": entry_id, "error": str(exc)})
+
+    # Walk the entries again to update existing nodes
+    for entry_id, owner, repo, title, description, author in parsed_entries:
+        if (owner, repo) in node_pairs:
+            try:
+                update_node_from_manager(owner, repo, name=title, description=description, author=author)
+                counts["updated_nodes"] += 1
+            except Exception as exc:
+                logger.warning("update failed for %s: %s", entry_id, exc)
+                counts["errors"].append({"entry_id": entry_id, "error": str(exc)})
 
     return {"status": "ok", **counts}

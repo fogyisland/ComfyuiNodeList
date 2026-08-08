@@ -204,11 +204,11 @@ def test_partial_insert_failure(db_eager, system_user, httpx_mock, monkeypatch):
     real_insert = insert_pending_submission
     call_count = {"n": 0}
 
-    def flaky_insert(submitter_id, url):
+    def flaky_insert(submitter_id, url, **kwargs):
         call_count["n"] += 1
         if call_count["n"] == 3:
             raise RuntimeError("simulated DB failure")
-        return real_insert(submitter_id, url)
+        return real_insert(submitter_id, url, **kwargs)
 
     monkeypatch.setattr("scanner.tasks.sync_manager_catalog.insert_pending_submission", flaky_insert)
     result = sync_manager_catalog()
@@ -270,3 +270,87 @@ def test_url_with_nested_path(db_eager, system_user, httpx_mock):
     rows = _pending_submissions()
     assert len(rows) == 1
     assert rows[0]["github_url"] == "https://github.com/foo/bar"
+
+
+def test_pending_submission_includes_name_and_description(db_eager, system_user, httpx_mock):
+    httpx_mock.add_response(url=MANAGER_URL, json={"node-a": {"reference": "https://github.com/aa/bb", "title": "Node A Title", "description": "Node A description text"}})
+    result = sync_manager_catalog()
+    assert result["status"] == "ok"
+    assert result["added"] == 1
+    assert result["updated_nodes"] == 0
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name, description FROM node_submissions WHERE github_url='https://github.com/aa/bb'")
+            row = cur.fetchone()
+    assert row["name"] == "Node A Title"
+    assert row["description"] == "Node A description text"
+
+
+def test_pending_submission_null_name_description_when_missing(db_eager, system_user, httpx_mock):
+    httpx_mock.add_response(url=MANAGER_URL, json={"node-b": {"reference": "https://github.com/cc/dd"}})
+    result = sync_manager_catalog()
+    assert result["added"] == 1
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name, description FROM node_submissions WHERE github_url='https://github.com/cc/dd'")
+            row = cur.fetchone()
+    assert row["name"] is None
+    assert row["description"] is None
+
+
+def test_existing_node_updated_from_manager(db_eager, system_user, httpx_mock):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO nodes (github_owner, github_repo, name, author, description, source_manager, created_at, updated_at) VALUES ('ee', 'ff', 'OldName', 'OldAuthor', 'OldDesc', false, NOW(), NOW())")
+            conn.commit()
+    httpx_mock.add_response(url=MANAGER_URL, json={"node-c": {"reference": "https://github.com/ee/ff", "title": "NewName", "description": "NewDesc", "author": "NewAuthor"}})
+    result = sync_manager_catalog()
+    assert result["added"] == 0
+    assert result["skipped_existing"] == 1
+    assert result["updated_nodes"] == 1
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name, author, description, source_manager FROM nodes WHERE github_owner='ee' AND github_repo='ff'")
+            row = cur.fetchone()
+    assert row["name"] == "NewName"
+    assert row["author"] == "NewAuthor"
+    assert row["description"] == "NewDesc"
+    assert row["source_manager"] == 1
+
+
+def test_existing_node_coalesce_preserves_existing_when_manager_missing(db_eager, system_user, httpx_mock):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO nodes (github_owner, github_repo, name, author, description, source_manager, created_at, updated_at) VALUES ('gg', 'hh', 'KeptName', 'KeptAuthor', 'KeptDesc', false, NOW(), NOW())")
+            conn.commit()
+    httpx_mock.add_response(url=MANAGER_URL, json={"node-d": {"reference": "https://github.com/gg/hh"}})
+    result = sync_manager_catalog()
+    assert result["updated_nodes"] == 1
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name, author, description, source_manager FROM nodes WHERE github_owner='gg' AND github_repo='hh'")
+            row = cur.fetchone()
+    assert row["name"] == "KeptName"
+    assert row["author"] == "KeptAuthor"
+    assert row["description"] == "KeptDesc"
+    assert row["source_manager"] == 1
+
+
+def test_update_node_failure_appends_to_errors(db_eager, system_user, httpx_mock, monkeypatch):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO nodes (github_owner, github_repo, name, author, description, created_at, updated_at) VALUES ('ii', 'jj', 'n1', 'a1', 'd1', NOW(), NOW()), ('kk', 'll', 'n2', 'a2', 'd2', NOW(), NOW())")
+            conn.commit()
+    httpx_mock.add_response(url=MANAGER_URL, json={"node-e": {"reference": "https://github.com/ii/jj", "title": "T1", "description": "D1"}, "node-f": {"reference": "https://github.com/kk/ll", "title": "T2", "description": "D2"}})
+    call_count = {"n": 0}
+    def flaky_update(*args, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 2:
+            raise RuntimeError("simulated DB blip")
+        from scanner.db import update_node_from_manager
+        return update_node_from_manager(*args, **kwargs)
+    monkeypatch.setattr("scanner.tasks.sync_manager_catalog.update_node_from_manager", flaky_update)
+    result = sync_manager_catalog()
+    assert result["status"] == "ok"
+    assert len(result["errors"]) == 1
+    assert "simulated DB blip" in result["errors"][0]["error"]
