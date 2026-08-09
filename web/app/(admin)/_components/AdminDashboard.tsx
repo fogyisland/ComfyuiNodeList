@@ -3,19 +3,28 @@ import Link from 'next/link';
 import { ManagerSyncButton } from './ManagerSyncButton';
 import { Card } from '@/app/_components/Card';
 import { Badge } from '@/app/_components/Badge';
+import type { ScanRunSummary } from '@/lib/scan-runs';
 
 type Props = {
   pendingRevisions: number;
   pendingSubmissions: number;
   recent: Array<{ id: number; kind: 'revision' | 'submission'; at: string; summary: string }>;
   managerSystemUserId: number | null;
+  latestRun: ScanRunSummary | null;
 };
 
-export function AdminDashboard({ pendingRevisions, pendingSubmissions, recent, managerSystemUserId }: Props) {
+export function AdminDashboard({ pendingRevisions, pendingSubmissions, recent, managerSystemUserId, latestRun }: Props) {
+  // Plan 5.1.4 Task 4 will render <LastSyncedAt run={latestRun} /> next to
+  // <ManagerSyncButton>. Reference the prop here so it is consumed by
+  // TypeScript's noUnusedLocals check; Task 4 will replace this with the
+  // actual component.
+  void latestRun;
   return (
     <div className="space-y-6">
       <h1 className="text-display-md text-fg-primary">Dashboard</h1>
-      <ManagerSyncButton managerSystemUserId={managerSystemUserId} />
+      <div className="flex items-center gap-4">
+        <ManagerSyncButton managerSystemUserId={managerSystemUserId} />
+      </div>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
           { href: '/admin/revisions', label: '待审核修订', value: pendingRevisions },

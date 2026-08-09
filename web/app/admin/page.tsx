@@ -1,11 +1,12 @@
 import { prisma } from '@/lib/db';
 import { RevisionStatus, SubmissionStatus } from '@prisma/client';
 import { AdminDashboard } from '@/app/(admin)/_components/AdminDashboard';
+import { getLatestScanRun } from '@/lib/scan-runs';
 
 const MANAGER_SYSTEM_USERNAME = 'comfyui-manager';
 
 export default async function AdminDashboardPage() {
-  const [pendingRevisions, pendingSubmissions, recentRevisions, recentSubmissions, managerUser] =
+  const [pendingRevisions, pendingSubmissions, recentRevisions, recentSubmissions, managerUser, latestRun] =
     await Promise.all([
       prisma.wikiRevision.count({ where: { status: RevisionStatus.pending } }),
       prisma.nodeSubmission.count({ where: { status: SubmissionStatus.pending } }),
@@ -23,6 +24,7 @@ export default async function AdminDashboardPage() {
         where: { username: MANAGER_SYSTEM_USERNAME },
         select: { id: true },
       }),
+      getLatestScanRun('sync_manager_catalog'),
     ]);
 
   const recent = [
@@ -48,6 +50,7 @@ export default async function AdminDashboardPage() {
       pendingSubmissions={pendingSubmissions}
       recent={recent}
       managerSystemUserId={managerUser ? Number(managerUser.id) : null}
+      latestRun={latestRun}
     />
   );
 }
