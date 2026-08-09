@@ -1,7 +1,7 @@
 'use client';
 import type { HTMLAttributes } from 'react';
 
-type Kind = 'default' | 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'mono';
+type Kind = 'default' | 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'mono' | 'manager';
 
 const kindClasses: Record<Kind, string> = {
   default: 'bg-subtle text-fg-secondary',
@@ -11,6 +11,7 @@ const kindClasses: Record<Kind, string> = {
   danger: 'bg-red-50 text-danger',
   info: 'bg-cyan-50 text-accent-cyan',
   mono: 'bg-transparent border border-border-default text-fg-secondary font-mono',
+  manager: 'bg-slate-100 text-slate-600',
 };
 
 type Props = HTMLAttributes<HTMLSpanElement> & { kind?: Kind };

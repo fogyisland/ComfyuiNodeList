@@ -16,4 +16,8 @@ describe('Badge', () => {
     const { container } = render(<Badge kind="mono">v1.0</Badge>);
     expect((container.firstChild as HTMLElement).className).toContain('font-mono');
   });
+  it('manager uses bg-slate-100', () => {
+    const { container } = render(<Badge kind="manager">via Manager</Badge>);
+    expect((container.firstChild as HTMLElement).className).toContain('bg-slate-100');
+  });
 });

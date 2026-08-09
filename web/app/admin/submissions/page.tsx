@@ -11,6 +11,7 @@ export default async function AdminSubmissionsPage() {
   const items = rows.map((s) => ({
     id: Number(s.id),
     submitterUsername: s.submitter.username,
+    submitterSource: (s.submitter.username === 'comfyui-manager' ? 'manager' : 'user') as 'manager' | 'user',
     githubUrl: s.github_url,
     createdAt: s.created_at.toISOString(),
   }));

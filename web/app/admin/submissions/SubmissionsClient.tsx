@@ -1,10 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Badge } from '@/app/_components/Badge';
 
 type Item = {
   id: number;
   submitterUsername: string;
+  submitterSource: 'manager' | 'user';
   githubUrl: string;
   createdAt: string;
 };
@@ -49,6 +51,7 @@ export function SubmissionsClient({ items }: Props) {
           <tr className="text-left text-gray-700">
             <th className="px-2 py-1">#</th>
             <th className="px-2 py-1">提交者</th>
+            <th className="px-2 py-1">来源</th>
             <th className="px-2 py-1">GitHub URL</th>
             <th className="px-2 py-1">提交时间</th>
             <th className="px-2 py-1">操作</th>
@@ -59,6 +62,13 @@ export function SubmissionsClient({ items }: Props) {
             <tr key={it.id} className="border-t border-gray-200">
               <td className="px-2 py-1 font-mono text-xs">#{it.id}</td>
               <td className="px-2 py-1">{it.submitterUsername}</td>
+              <td className="px-2 py-1">
+                {it.submitterSource === 'manager' ? (
+                  <Badge kind="manager">Manager</Badge>
+                ) : (
+                  <span className="text-xs text-gray-400">—</span>
+                )}
+              </td>
               <td className="px-2 py-1 font-mono text-xs">{it.githubUrl}</td>
               <td className="px-2 py-1 text-xs text-gray-500">{it.createdAt}</td>
               <td className="px-2 py-1">
