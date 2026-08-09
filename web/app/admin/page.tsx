@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db';
 import { RevisionStatus, SubmissionStatus } from '@prisma/client';
-import { AdminDashboard } from '@/app/(admin)/_components/AdminDashboard';
+import { AdminHomeClient } from './AdminHomeClient';
 import { getLatestScanRun } from '@/lib/scan-runs';
 
 const MANAGER_SYSTEM_USERNAME = 'comfyui-manager';
@@ -45,7 +45,7 @@ export default async function AdminDashboardPage() {
     .slice(0, 10);
 
   return (
-    <AdminDashboard
+    <AdminHomeClient
       pendingRevisions={pendingRevisions}
       pendingSubmissions={pendingSubmissions}
       recent={recent}
