@@ -67,6 +67,7 @@ export default async function NodesPage({ searchParams }: Props) {
         author: true,
         description: true,
         updated_at: true,
+        source_manager: true,
       },
     }),
     prisma.node
@@ -148,6 +149,7 @@ export default async function NodesPage({ searchParams }: Props) {
               author={n.author}
               description={n.description}
               updatedAt={n.updated_at}
+              sourceManager={n.source_manager}
             />
           ))}
         </div>
