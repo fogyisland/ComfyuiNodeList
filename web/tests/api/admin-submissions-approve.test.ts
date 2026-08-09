@@ -94,3 +94,65 @@ describe('POST /api/v1/admin/submissions/[id]/approve', () => {
     expect(res.status).toBe(409);
   });
 });
+
+describe('approveSubmission - Manager source', () => {
+  beforeEach(async () => {
+    authMock.mockReset();
+    await setup();
+    await seedFixture(prisma);
+  });
+
+  it('approving a Manager-sourced submission sets source_manager=true and propagates name/description', async () => {
+    const manager = await prisma.user.upsert({
+      where: { username: 'comfyui-manager' },
+      update: {},
+      create: { github_id: 999n, username: 'comfyui-manager', avatar_url: '', role: 'user' },
+    });
+    const admin = await makeUser(1n, 'admin');
+    authMock.mockResolvedValue({ user: { id: admin.id.toString(), role: 'admin' } });
+    const sub = await prisma.nodeSubmission.create({
+      data: {
+        submitter_id: manager.id,
+        github_url: 'https://github.com/mgrtest/repo1',
+        name: 'Mgr Title',
+        description: 'Mgr description',
+        status: SubmissionStatus.pending,
+      },
+    });
+    const res = await POST(new NextRequest('http://x', { method: 'POST', body: '{}' }), {
+      params: Promise.resolve({ id: String(sub.id) }),
+    });
+    expect(res.status).toBe(200);
+    const node = await prisma.node.findUniqueOrThrow({
+      where: { github_owner_github_repo: { github_owner: 'mgrtest', github_repo: 'repo1' } },
+    });
+    expect(node.source_manager).toBe(true);
+    expect(node.name).toBe('Mgr Title');
+    expect(node.description).toBe('Mgr description');
+  });
+
+  it('approving a user-sourced submission does NOT set source_manager', async () => {
+    const regular = await prisma.user.upsert({
+      where: { username: 'regular-user-test' },
+      update: {},
+      create: { github_id: 998n, username: 'regular-user-test', avatar_url: '', role: 'user' },
+    });
+    const admin = await makeUser(1n, 'admin');
+    authMock.mockResolvedValue({ user: { id: admin.id.toString(), role: 'admin' } });
+    const sub = await prisma.nodeSubmission.create({
+      data: {
+        submitter_id: regular.id,
+        github_url: 'https://github.com/usertest/repo2',
+        status: SubmissionStatus.pending,
+      },
+    });
+    const res = await POST(new NextRequest('http://x', { method: 'POST', body: '{}' }), {
+      params: Promise.resolve({ id: String(sub.id) }),
+    });
+    expect(res.status).toBe(200);
+    const node = await prisma.node.findUniqueOrThrow({
+      where: { github_owner_github_repo: { github_owner: 'usertest', github_repo: 'repo2' } },
+    });
+    expect(node.source_manager).toBe(false);
+  });
+});

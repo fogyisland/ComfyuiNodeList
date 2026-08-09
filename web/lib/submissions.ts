@@ -12,7 +12,10 @@ export async function approveSubmission(input: {
   reviewNote?: string;
 }): Promise<SubmissionApproveResult> {
   return prisma.$transaction(async (tx) => {
-    const sub = await tx.nodeSubmission.findUnique({ where: { id: BigInt(input.submissionId) } });
+    const sub = await tx.nodeSubmission.findUnique({
+      where: { id: BigInt(input.submissionId) },
+      include: { submitter: { select: { username: true } } },
+    });
     if (!sub) return { ok: false as const, reason: 'not-found' as const };
     if (sub.status !== SubmissionStatus.pending) return { ok: false as const, reason: 'not-pending' as const };
     const parsed = parseGithubUrl(sub.github_url);
@@ -24,14 +27,16 @@ export async function approveSubmission(input: {
     if (existing) {
       nodeId = existing.id;
     } else {
+      const isManagerSourced = sub.submitter?.username === 'comfyui-manager';
       const created = await tx.node.create({
         data: {
           github_owner: parsed.owner,
           github_repo: parsed.repo,
-          name: parsed.repo,
-          author: '',
-          description: '',
+          name: sub.name ?? parsed.repo,
+          author: sub.submitter?.username ?? '',
+          description: sub.description ?? '',
           status: NodeStatus.active,
+          source_manager: isManagerSourced,
         },
       });
       nodeId = created.id;
