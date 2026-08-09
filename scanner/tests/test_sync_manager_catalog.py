@@ -373,3 +373,82 @@ def test_beat_schedule_daily_at_05_00_utc():
     # crontab._orig_minute / _orig_hour are the raw cron fields
     assert sched.hour == {5}, f"expected hour=5 UTC, got {sched.hour}"
     assert sched.minute == {0}, f"expected minute=0, got {sched.minute}"
+
+
+# --- scan_runs row written on every sync_manager_catalog call (Task 2 of Plan 5.1.4) ---
+
+
+def test_sync_writes_ok_run_on_success(db_eager, system_user, httpx_mock):
+    """Sync writes a scan_runs row with status='ok' on success."""
+    httpx_mock.add_response(
+        url=MANAGER_URL,
+        json={"node-a": {"reference": "https://github.com/aa/bb", "title": "A"}},
+    )
+    sync_manager_catalog()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT task_name, status, counts, error FROM scan_runs "
+                "WHERE task_name = 'sync_manager_catalog' ORDER BY finished_at DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+    assert row is not None
+    assert row["task_name"] == "sync_manager_catalog"
+    assert row["status"] == "ok"
+    assert row["error"] is None
+    parsed = json.loads(row["counts"]) if isinstance(row["counts"], str) else row["counts"]
+    assert "added" in parsed
+    assert "updated_nodes" in parsed
+
+
+def test_sync_writes_failed_run_on_fetch_error(db_eager, httpx_mock, monkeypatch):
+    """Sync writes a scan_runs row with status='failed' when fetch raises."""
+    import httpx
+    def boom(*args, **kwargs):
+        raise httpx.HTTPError("simulated network error")
+    monkeypatch.setattr("scanner.tasks.sync_manager_catalog.httpx.get", boom)
+    # Function does NOT re-raise (preserves original early-return contract);
+    # the scan_runs row still gets written in the finally block.
+    result = sync_manager_catalog()
+    assert result["status"] == "failed"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status, error FROM scan_runs "
+                "WHERE task_name = 'sync_manager_catalog' ORDER BY finished_at DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+    assert row["status"] == "failed"
+    assert row["error"] is not None
+    assert "simulated network error" in row["error"]
+
+
+def test_sync_writes_run_even_when_inner_step_raises(db_eager, system_user, httpx_mock, monkeypatch):
+    """If an INSERT step raises mid-loop, the scan_runs row still gets written."""
+    call_count = {"n": 0}
+
+    def flaky_insert(*args, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise RuntimeError("simulated INSERT blip")
+        return insert_pending_submission(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "scanner.tasks.sync_manager_catalog.insert_pending_submission", flaky_insert
+    )
+    httpx_mock.add_response(
+        url=MANAGER_URL,
+        json={"node-a": {"reference": "https://github.com/aa/bb", "title": "A"}},
+    )
+    # Should NOT raise; the error is appended to counts.errors and the run still gets recorded
+    sync_manager_catalog()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status, counts FROM scan_runs "
+                "WHERE task_name = 'sync_manager_catalog' ORDER BY finished_at DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+    assert row["status"] == "ok"  # the function doesn't re-raise (errors are accumulated)
+    parsed = json.loads(row["counts"]) if isinstance(row["counts"], str) else row["counts"]
+    assert parsed["errors_count"] >= 1

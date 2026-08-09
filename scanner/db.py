@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from contextlib import contextmanager
@@ -10,6 +11,8 @@ from urllib.parse import urlparse
 
 import pymysql
 from pymysql.cursors import DictCursor
+
+logger = logging.getLogger(__name__)
 
 
 def _config_from_env() -> dict[str, Any]:
@@ -335,3 +338,40 @@ def update_node_from_manager(
             affected = cur.rowcount
         conn.commit()
     return affected
+
+
+def insert_scan_run(
+    task_name: str,
+    started_at: datetime,
+    finished_at: datetime,
+    status: str,
+    counts: dict,
+    error: str | None = None,
+) -> int:
+    """Insert a scan_runs row. Returns new id, or -1 on DB write failure.
+
+    Safe to call from a finally block: failures are logged but not raised.
+    The `error` field is truncated to 1024 chars. `counts` is JSON-serialized.
+    """
+    try:
+        truncated_error = error[:1024] if error else None
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO scan_runs (task_name, started_at, finished_at, status, counts, error) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (
+                        task_name,
+                        started_at,
+                        finished_at,
+                        status,
+                        json.dumps(counts) if counts else None,
+                        truncated_error,
+                    ),
+                )
+                new_id = cur.lastrowid
+            conn.commit()
+        return new_id
+    except Exception as exc:
+        logger.warning("insert_scan_run failed for %s: %s", task_name, exc)
+        return -1

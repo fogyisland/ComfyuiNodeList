@@ -389,3 +389,77 @@ def test_update_node_from_manager_case_insensitive_match(db):
             )
             row = cur.fetchone()
     assert row["name"] == "Updated"
+
+
+# --- insert_scan_run (Task 2 of Plan 5.1.4) ---
+
+
+def test_insert_scan_run_writes_row(db):
+    """Happy path: row contains all expected fields."""
+    from scanner.db import insert_scan_run
+    started = datetime(2026, 8, 9, 5, 0, 0)
+    finished = datetime(2026, 8, 9, 5, 1, 30)
+    new_id = insert_scan_run(
+        task_name="sync_manager_catalog",
+        started_at=started,
+        finished_at=finished,
+        status="ok",
+        counts={"added": 3, "updated_nodes": 1, "errors_count": 0},
+    )
+    assert isinstance(new_id, int) and new_id > 0
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT task_name, started_at, finished_at, status, counts, error "
+                "FROM scan_runs WHERE id = %s",
+                (new_id,),
+            )
+            row = cur.fetchone()
+    assert row["task_name"] == "sync_manager_catalog"
+    assert row["status"] == "ok"
+    assert row["error"] is None
+    # counts is JSON; column comes back as str on PyMySQL
+    parsed = json.loads(row["counts"]) if isinstance(row["counts"], str) else row["counts"]
+    assert parsed["added"] == 3
+    assert parsed["updated_nodes"] == 1
+
+
+def test_insert_scan_run_with_error_field(db):
+    """Failed status persists error truncated to 1024 chars."""
+    from scanner.db import insert_scan_run
+    long_err = "x" * 2000
+    new_id = insert_scan_run(
+        task_name="sync_manager_catalog",
+        started_at=datetime(2026, 8, 9, 5, 0, 0),
+        finished_at=datetime(2026, 8, 9, 5, 0, 5),
+        status="failed",
+        counts={"errors_count": 1},
+        error=long_err,
+    )
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT status, error FROM scan_runs WHERE id = %s", (new_id,))
+            row = cur.fetchone()
+    assert row["status"] == "failed"
+    assert row["error"] is not None
+    assert len(row["error"]) == 1024  # truncated
+
+
+def test_insert_scan_run_does_not_raise_on_db_blip(db, monkeypatch):
+    """DB blip returns -1 and does NOT raise (safe for finally blocks)."""
+    from scanner import db as db_module
+    from scanner.db import insert_scan_run
+
+    def broken_execute(*args, **kwargs):
+        import pymysql
+        raise pymysql.OperationalError("simulated DB blip")
+
+    monkeypatch.setattr(db_module, "get_connection", broken_execute)
+    result = insert_scan_run(
+        task_name="sync_manager_catalog",
+        started_at=datetime(2026, 8, 9, 5, 0, 0),
+        finished_at=datetime(2026, 8, 9, 5, 0, 5),
+        status="ok",
+        counts={},
+    )
+    assert result == -1
