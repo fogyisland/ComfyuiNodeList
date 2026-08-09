@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ManagerSyncButton } from './ManagerSyncButton';
 import { Card } from '@/app/_components/Card';
 import { Badge } from '@/app/_components/Badge';
+import { LastSyncedAt } from '@/app/_components/LastSyncedAt';
 import type { ScanRunSummary } from '@/lib/scan-runs';
 
 type Props = {
@@ -14,16 +15,12 @@ type Props = {
 };
 
 export function AdminDashboard({ pendingRevisions, pendingSubmissions, recent, managerSystemUserId, latestRun }: Props) {
-  // Plan 5.1.4 Task 4 will render <LastSyncedAt run={latestRun} /> next to
-  // <ManagerSyncButton>. Reference the prop here so it is consumed by
-  // TypeScript's noUnusedLocals check; Task 4 will replace this with the
-  // actual component.
-  void latestRun;
   return (
     <div className="space-y-6">
       <h1 className="text-display-md text-fg-primary">Dashboard</h1>
       <div className="flex items-center gap-4">
         <ManagerSyncButton managerSystemUserId={managerSystemUserId} />
+        <LastSyncedAt run={latestRun} />
       </div>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
