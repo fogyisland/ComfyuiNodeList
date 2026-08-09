@@ -172,3 +172,16 @@ model GitShaResolution {
   @@index([resolved_at])
   @@map("gitsha_resolutions")
 }
+
+model ScanRun {
+  id          BigInt   @id @default(autoincrement())
+  task_name   String   @db.VarChar(64)
+  started_at  DateTime @db.DateTime(3)
+  finished_at DateTime @db.DateTime(3)
+  status      String   @db.VarChar(16)
+  counts      Json?
+  error       String?  @db.Text
+
+  @@index([task_name, finished_at(sort: Desc)])
+  @@map("scan_runs")
+}
