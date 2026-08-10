@@ -375,3 +375,87 @@ def insert_scan_run(
     except Exception as exc:
         logger.warning("insert_scan_run failed for %s: %s", task_name, exc)
         return -1
+
+
+def start_scan_run(task_name: str) -> int:
+    """Insert a `scan_runs` row with status='running' and finished_at=NULL.
+
+    Returns the new id. Caller is expected to invoke `complete_scan_run` later
+    to transition the row to 'ok'/'failed'. The status↔finished_at invariant
+    ('running' ↔ finished_at IS NULL) is enforced at the application layer.
+    """
+    started_at = datetime.utcnow()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO scan_runs (task_name, started_at, finished_at, status) "
+                "VALUES (%s, %s, NULL, 'running')",
+                (task_name, started_at),
+            )
+            new_id = cur.lastrowid
+        conn.commit()
+    return new_id
+
+
+def complete_scan_run(
+    run_id: int,
+    status: str,
+    counts: dict,
+    error: str | None = None,
+) -> None:
+    """Update a `scan_runs` row to its terminal status and set finished_at.
+
+    Caller passes the id returned by `start_scan_run` and the terminal status
+    ('ok' or 'failed'). `counts` is JSON-serialized; pass an empty dict for runs
+    that completed with no work. `error` is optional and stored as-is.
+    """
+    finished_at = datetime.utcnow()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE scan_runs "
+                "SET finished_at = %s, status = %s, counts = %s, error = %s "
+                "WHERE id = %s",
+                (
+                    finished_at,
+                    status,
+                    json.dumps(counts) if counts else None,
+                    error,
+                    run_id,
+                ),
+            )
+        conn.commit()
+
+
+def get_latest_scan_run_any_status(task_name: str) -> dict | None:
+    """Return the most recent `scan_runs` row for `task_name`, regardless of status.
+
+    Returned dict keys: id, status, started_at, finished_at, error, counts.
+    `counts` is JSON-deserialized back into a Python object (or None if the
+    column is NULL). Returns None if no row exists for the task.
+
+    The status filter is intentionally absent so callers can observe in-flight
+    ('running') runs — see Task 5 ManagerSyncButton state machine, which needs
+    to render a "syncing…" state.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, status, started_at, finished_at, error, counts "
+                "FROM scan_runs WHERE task_name = %s "
+                "ORDER BY started_at DESC LIMIT 1",
+                (task_name,),
+            )
+            row = cur.fetchone()
+    if row is None:
+        return None
+    counts_raw = row["counts"]
+    counts = json.loads(counts_raw) if counts_raw else None
+    return {
+        "id": row["id"],
+        "status": row["status"],
+        "started_at": row["started_at"],
+        "finished_at": row["finished_at"],
+        "error": row["error"],
+        "counts": counts,
+    }
