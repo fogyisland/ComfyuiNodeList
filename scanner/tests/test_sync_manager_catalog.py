@@ -520,3 +520,125 @@ def test_sync_writes_run_even_when_inner_step_raises(db_eager, system_user, http
     assert row["status"] == "ok"  # the function doesn't re-raise (errors are accumulated)
     parsed = json.loads(row["counts"]) if isinstance(row["counts"], str) else row["counts"]
     assert parsed["errors_count"] >= 1
+
+
+# --- Plan 5.1.4 Task 3: running-row-then-completed sentinel flow ---
+# Note: brief illustrative symbol names (_fetch_manager_catalog, upsert_nodes_from_catalog)
+# do not exist as standalone functions in sync_manager_catalog.py — the fetch is inline
+# (httpx.get) and the upsert path goes through db.insert_pending_submission + db.update_node_from_manager.
+# Per the ambiguity resolution, these tests monkeypatch httpx.get via httpx_mock to drive a
+# benign end-to-end path, or monkeypatch start_scan_run to simulate DB failures on the call site.
+
+
+def test_sync_writes_running_then_ok_via_start_complete(db_eager, system_user, httpx_mock, monkeypatch):
+    """start_scan_run writes a 'running' sentinel at the top, complete_scan_run updates it.
+
+    Verifies the transition: a new run is 'running' while the task is in flight, then becomes
+    'ok' once complete_scan_run fires in finally. We assert the *terminal* state here;
+    in-flight observation is the responsibility of Task 4's polling endpoint.
+    """
+    from scanner.tasks import sync_manager_catalog as task_module
+
+    calls = {"start": 0, "complete": 0}
+
+    real_start = task_module.start_scan_run
+    real_complete = task_module.complete_scan_run
+
+    def tracking_start(task_name):
+        calls["start"] += 1
+        return real_start(task_name)
+
+    def tracking_complete(*args, **kwargs):
+        calls["complete"] += 1
+        return real_complete(*args, **kwargs)
+
+    monkeypatch.setattr(task_module, "start_scan_run", tracking_start)
+    monkeypatch.setattr(task_module, "complete_scan_run", tracking_complete)
+
+    httpx_mock.add_response(url=MANAGER_URL, json={})  # benign empty catalog
+    sync_manager_catalog()
+
+    # Both helpers must have been invoked exactly once
+    assert calls["start"] == 1, f"start_scan_run should be called once, got {calls['start']}"
+    assert calls["complete"] == 1, f"complete_scan_run should be called once, got {calls['complete']}"
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status, finished_at FROM scan_runs "
+                "WHERE task_name = 'sync_manager_catalog' ORDER BY id DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+    assert row is not None
+    assert row["status"] == "ok"
+    assert row["finished_at"] is not None  # terminal row, no longer 'running'
+
+
+def test_sync_updates_row_to_failed_on_catalog_fetch_exception(db_eager, httpx_mock, monkeypatch):
+    """When the catalog fetch raises, the existing fetch-failure branch returns early,
+    but the finally still runs complete_scan_run with status='failed' and the error."""
+    import httpx
+
+    def boom(*args, **kwargs):
+        raise httpx.HTTPError("catalog fetch failed")
+
+    monkeypatch.setattr("scanner.tasks.sync_manager_catalog.httpx.get", boom)
+
+    result = sync_manager_catalog()
+    assert result["status"] == "failed"  # original early-return contract preserved
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status, error, finished_at FROM scan_runs "
+                "WHERE task_name = 'sync_manager_catalog' ORDER BY id DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+    assert row is not None
+    assert row["status"] == "failed"
+    assert row["finished_at"] is not None
+    assert "catalog fetch failed" in row["error"]
+
+
+def test_sync_survives_start_scan_run_failure(db_eager, system_user, httpx_mock, monkeypatch):
+    """If start_scan_run itself raises (e.g. DB down), the task must still complete.
+
+    With the new flow: start_scan_run failure → run_id stays None → finally sees run_id is None
+    and skips complete_scan_run. The task body continues executing and returns normally.
+    No scan_runs row is written.
+    """
+    from scanner.tasks import sync_manager_catalog as task_module
+
+    def fail_start(_task_name):
+        raise RuntimeError("DB down")
+
+    monkeypatch.setattr(task_module, "start_scan_run", fail_start)
+    # complete_scan_run should NOT be called when start fails
+    complete_called = {"n": 0}
+
+    def tracking_complete(*args, **kwargs):
+        complete_called["n"] += 1
+        return None
+
+    monkeypatch.setattr(task_module, "complete_scan_run", tracking_complete)
+
+    httpx_mock.add_response(
+        url=MANAGER_URL,
+        json={"node-a": {"reference": "https://github.com/aa/bb", "title": "A"}},
+    )
+    # Must not raise
+    result = sync_manager_catalog()
+    assert result["status"] == "ok"
+    assert result["added"] == 1
+    assert complete_called["n"] == 0, "complete_scan_run must not be called when start_scan_run fails"
+
+    # Confirm no row was written for this task in this test
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM scan_runs WHERE task_name = 'sync_manager_catalog'"
+            )
+            row = cur.fetchone()
+    # Note: other tests in this file write rows too; but in the db_eager scope, only this
+    # function ran (the fixture resets between tests), so the count should be 0.
+    assert row["n"] == 0, f"expected no scan_runs rows when start_scan_run fails, got {row['n']}"

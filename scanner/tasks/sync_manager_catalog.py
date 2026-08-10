@@ -15,10 +15,11 @@ import httpx
 from scanner.celery_app import celery_app
 from scanner.db import (
     _parse_github_url,
+    complete_scan_run,
     fetch_existing_owner_repo_pairs,
     fetch_system_submitter_id,
     insert_pending_submission,
-    insert_scan_run,
+    start_scan_run,
     update_node_from_manager,
 )
 
@@ -37,8 +38,13 @@ def sync_manager_catalog() -> dict:
     Returns dict with status, fetched, added, skipped_existing, skipped_pending,
     skipped_invalid_url, errors[]. See spec §Data flow step 6.
 
-    Always records a `scan_runs` row (status='ok' or 'failed') in the finally
-    block. Plan 5.1.4 Task 2 added the recording; Task 3 (Prisma) reads it.
+    Records a `scan_runs` row for the sync: a `running` sentinel is written
+    at the top of the function (via `start_scan_run`), and the row is updated
+    in `finally` to `ok`/`failed` (via `complete_scan_run`). This enables
+    in-flight observation from Task 4's polling endpoint and Task 5's
+    ManagerSyncButton state machine. Failure of either helper degrades
+    gracefully — the task continues and the row simply isn't written/updated.
+    Plan 5.1.4 Task 2 added the recording; Task 3 (Prisma) reads it.
     Top-level errors (fetch/parse/dedup/system_user) are converted to a
     failure dict (NOT re-raised) so callers get a consistent return shape;
     per-entry errors during INSERT/UPDATE are appended to counts.errors
@@ -56,6 +62,15 @@ def sync_manager_catalog() -> dict:
     started_at = datetime.utcnow()
     status = "ok"
     failure_payload: dict | None = None
+    # Write a `running` sentinel row at the top so the polling endpoint
+    # (Task 4) and ManagerSyncButton (Task 5) can observe an in-flight sync.
+    # Failure is graceful: run_id stays None and the task proceeds without
+    # a scan_runs row (mirror the safety pattern of the old insert_scan_run).
+    run_id: int | None = None
+    try:
+        run_id = start_scan_run("sync_manager_catalog")
+    except Exception:
+        logger.exception("start_scan_run failed; sync proceeds without scan_runs row")
     try:
         # Step 1: Fetch catalog
         try:
@@ -164,7 +179,6 @@ def sync_manager_catalog() -> dict:
         counts["errors"].append({"entry_id": "*", "error": str(exc)})
         raise
     finally:
-        finished_at = datetime.utcnow()
         summary = {
             "added": counts["added"],
             "skipped_existing": counts["skipped_existing"],
@@ -175,15 +189,18 @@ def sync_manager_catalog() -> dict:
         error_msg = None
         if status == "failed" and counts["errors"]:
             err = counts["errors"][0].get("error", "unknown")
+            # Truncate to 1024 chars at the call site (carry-forward finding
+            # from Task 2 review): complete_scan_run does not truncate
+            # internally (unlike insert_scan_run), and scan_runs.error is
+            # @db.Text but unbounded text from traceback can easily exceed
+            # 65535 bytes. Keep behavior consistent with prior code.
             error_msg = err[:1024] if err else "unknown"
-        run_id = insert_scan_run(
-            task_name="sync_manager_catalog",
-            started_at=started_at,
-            finished_at=finished_at,
-            status=status,
-            counts=summary,
-            error=error_msg,
-        )
-        if run_id == -1:
-            logger.warning("scan_runs insert failed for sync_manager_catalog")
+        if run_id is not None:
+            try:
+                complete_scan_run(run_id, status, summary, error_msg)
+            except Exception:
+                # Don't let a DB failure on completion mask the original
+                # task exception (carry-forward finding from Task 2 review);
+                # mirrors the insert_scan_run safety pattern.
+                logger.exception("complete_scan_run failed for run_id=%s", run_id)
     return {"status": "ok", **counts} if status == "ok" else failure_payload
