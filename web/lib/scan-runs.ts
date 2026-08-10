@@ -26,3 +26,23 @@ export async function getLatestScanRun(taskName: string): Promise<ScanRunSummary
     error: row.error,
   };
 }
+
+/**
+ * Latest run for a task regardless of status — including in-flight `running`
+ * rows, which have `finished_at = null`. Returns the Prisma row shape
+ * (snake_case) rather than ScanRunSummary, since callers need the nullable
+ * finished_at to tell "in progress" from "done".
+ */
+export async function getLatestScanRunAnyStatus(taskName: string) {
+  return prisma.scanRun.findFirst({
+    where: { task_name: taskName },
+    orderBy: { started_at: 'desc' },
+    select: {
+      id: true,
+      status: true,
+      started_at: true,
+      finished_at: true,
+      error: true,
+    },
+  });
+}
