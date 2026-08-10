@@ -375,6 +375,74 @@ def test_beat_schedule_daily_at_05_00_utc():
     assert sched.minute == {0}, f"expected minute=0, got {sched.minute}"
 
 
+def test_parse_cron_string_accepts_5_field_cron():
+    """Every-5-minutes and every-Monday-03:00 strings both parse to a crontab."""
+    from celery.schedules import crontab as _crontab
+    from scanner.celery_app import parse_cron_string
+
+    sched_every_5 = parse_cron_string("*/5 * * * *")
+    assert isinstance(sched_every_5, _crontab)
+    # crontab._orig_minute is the raw cron field; */5 should be preserved
+    assert sched_every_5._orig_minute == "*/5", (
+        f"expected _orig_minute='*/5', got {sched_every_5._orig_minute!r}"
+    )
+
+    sched_monday = parse_cron_string("0 3 * * 1")
+    assert sched_monday._orig_hour == "3"
+    assert sched_monday._orig_day_of_week == "1"
+
+
+def test_parse_cron_string_rejects_wrong_field_count():
+    """Both too-few and too-many fields must raise ValueError."""
+    from scanner.celery_app import parse_cron_string
+
+    with pytest.raises(ValueError, match="Expected 5 cron fields"):
+        parse_cron_string("0 5 * *")  # 4 fields
+    with pytest.raises(ValueError, match="Expected 5 cron fields"):
+        parse_cron_string("0 5 * * * *")  # 6 fields
+    with pytest.raises(ValueError, match="Expected 5 cron fields"):
+        parse_cron_string("")  # 0 fields
+
+
+def test_build_sync_manager_schedule_uses_env_var(monkeypatch):
+    """Setting CELERY_SYNC_MANAGER_CATALOG_CRON must override the schedule."""
+    from scanner import celery_app as celery_app_module
+
+    monkeypatch.setenv("CELERY_SYNC_MANAGER_CATALOG_CRON", "*/5 * * * *")
+    sched = celery_app_module._build_sync_manager_schedule()
+    assert sched._orig_minute == "*/5", (
+        f"expected env var override to produce */5 minutes, "
+        f"got {sched._orig_minute!r}"
+    )
+
+    monkeypatch.setenv("CELERY_SYNC_MANAGER_CATALOG_CRON", "0 3 * * 1")
+    sched = celery_app_module._build_sync_manager_schedule()
+    assert sched._orig_hour == "3"
+    assert sched._orig_day_of_week == "1"
+
+
+def test_build_sync_manager_schedule_falls_back_on_invalid(monkeypatch, caplog):
+    """Invalid env var should log a warning and fall back to default 05:00 UTC."""
+    from scanner import celery_app as celery_app_module
+
+    monkeypatch.setenv("CELERY_SYNC_MANAGER_CATALOG_CRON", "garbage")
+    with caplog.at_level("WARNING", logger="scanner.celery_app"):
+        sched = celery_app_module._build_sync_manager_schedule()
+
+    # Default = "0 5 * * *" → crontab(hour=5, minute=0)
+    assert sched._orig_hour == "5"
+    assert sched._orig_minute == "0"
+
+    # Warning was emitted
+    warning_messages = [
+        r.message for r in caplog.records if r.levelname == "WARNING"
+    ]
+    assert any(
+        "CELERY_SYNC_MANAGER_CATALOG_CRON" in msg and "garbage" in msg
+        for msg in warning_messages
+    ), f"expected fallback warning, got: {warning_messages}"
+
+
 # --- scan_runs row written on every sync_manager_catalog call (Task 2 of Plan 5.1.4) ---
 
 

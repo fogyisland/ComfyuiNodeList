@@ -1,7 +1,49 @@
+import logging
 import os
 
 from celery import Celery
 from celery.schedules import crontab
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_SYNC_MANAGER_CRON = "0 5 * * *"
+
+
+def parse_cron_string(spec: str) -> crontab:
+    """Parse a 5-field cron string into a Celery crontab.
+
+    Format: 'minute hour day_of_month month day_of_week'.
+    Field semantics match Celery's crontab() kwargs.
+    """
+    parts = spec.split()
+    if len(parts) != 5:
+        raise ValueError(f"Expected 5 cron fields, got {len(parts)}: {spec!r}")
+    minute, hour, day, month, day_of_week = parts
+    return crontab(
+        minute=minute,
+        hour=hour,
+        day_of_month=day,
+        month_of_year=month,
+        day_of_week=day_of_week,
+    )
+
+
+def _build_sync_manager_schedule() -> crontab:
+    """Build the sync_manager_catalog schedule from env var, falling back to default."""
+    spec = os.environ.get(
+        "CELERY_SYNC_MANAGER_CATALOG_CRON", _DEFAULT_SYNC_MANAGER_CRON
+    )
+    try:
+        return parse_cron_string(spec)
+    except ValueError as exc:
+        logger.warning(
+            "Invalid CELERY_SYNC_MANAGER_CATALOG_CRON=%r (%s); falling back to %r",
+            spec,
+            exc,
+            _DEFAULT_SYNC_MANAGER_CRON,
+        )
+        return parse_cron_string(_DEFAULT_SYNC_MANAGER_CRON)
+
 
 celery_app = Celery("scanner")
 
@@ -36,7 +78,7 @@ celery_app.conf.beat_schedule = {
     },
     "sync-manager-catalog-daily": {
         "task": "scanner.tasks.sync_manager_catalog",
-        "schedule": crontab(hour=5, minute=0),
+        "schedule": _build_sync_manager_schedule(),
     },
 }
 celery_app.conf.timezone = "UTC"
