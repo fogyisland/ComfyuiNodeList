@@ -59,7 +59,6 @@ def sync_manager_catalog() -> dict:
         "updated_nodes": 0,
         "errors": [],
     }
-    started_at = datetime.utcnow()
     status = "ok"
     failure_payload: dict | None = None
     # Write a `running` sentinel row at the top so the polling endpoint
