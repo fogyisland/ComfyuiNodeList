@@ -20,7 +20,9 @@ export async function getLatestScanRun(taskName: string): Promise<ScanRunSummary
     id: Number(row.id),
     taskName: row.task_name,
     startedAt: row.started_at,
-    finishedAt: row.finished_at,
+    // status: 'ok' filter guarantees finished_at IS NOT NULL (application invariant
+    // defined in the spec: running ↔ finished_at IS NULL, ok|failed ↔ NOT NULL).
+    finishedAt: row.finished_at!,
     status: row.status,
     counts: (row.counts as Record<string, number> | null) ?? null,
     error: row.error,
