@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/app/_components/Badge';
 
@@ -11,9 +12,9 @@ type Item = {
   createdAt: string;
 };
 
-type Props = { items: Item[] };
+type Props = { items: Item[]; source: 'all' | 'manager' | 'user' };
 
-export function SubmissionsClient({ items }: Props) {
+export function SubmissionsClient({ items, source }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState<number | null>(null);
   const [modal, setModal] = useState<{ id: number; mode: 'approve' | 'reject' } | null>(null);
@@ -39,13 +40,17 @@ export function SubmissionsClient({ items }: Props) {
     router.refresh();
   }
 
-  if (items.length === 0) {
-    return <p className="p-6 text-sm text-gray-500">暂无待审核节点收录请求。</p>;
-  }
-
   return (
     <div className="p-6">
       <h1 className="mb-4 text-2xl font-semibold">节点收录</h1>
+      <nav className="mb-4 flex gap-1 border-b border-gray-200">
+        <FilterTab href="/admin/submissions" active={source === 'all'}>全部</FilterTab>
+        <FilterTab href="/admin/submissions?source=manager" active={source === 'manager'}>Manager</FilterTab>
+        <FilterTab href="/admin/submissions?source=user" active={source === 'user'}>用户提交</FilterTab>
+      </nav>
+      {items.length === 0 ? (
+        <p className="text-sm text-gray-500">暂无待审核节点收录请求。</p>
+      ) : (
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-gray-700">
@@ -91,6 +96,7 @@ export function SubmissionsClient({ items }: Props) {
           ))}
         </tbody>
       </table>
+      )}
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
@@ -126,5 +132,23 @@ export function SubmissionsClient({ items }: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+type FilterTabProps = {
+  href: string;
+  active: boolean;
+  children: React.ReactNode;
+};
+
+function FilterTab({ href, active, children }: FilterTabProps) {
+  const base = 'rounded-t px-3 py-2 text-sm';
+  const cls = active
+    ? `${base} bg-blue-600 text-white`
+    : `${base} text-gray-600 hover:bg-gray-100`;
+  return (
+    <Link href={href} className={cls}>
+      {children}
+    </Link>
   );
 }
