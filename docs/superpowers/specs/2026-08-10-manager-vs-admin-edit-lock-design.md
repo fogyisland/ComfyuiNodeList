@@ -116,9 +116,9 @@ else:
 - Auth: admin-only, `requireAdmin()` from `@/lib/session`. Pattern mirrors `web/app/api/v1/admin/manager/sync/status/route.ts`: try/catch `UNAUTHENTICATED` → 401, `FORBIDDEN` → 403.
 - Body: `{ name?: string, description?: string|null, author?: string }`. At least one field required (else 422).
 - Validation:
-  - `name`: 1..255 chars (matches column `@db.VarChar(255)` + `String` non-null).
-  - `description`: ≤ 65535 chars (`@db.Text`).
-  - `author`: 1..128 chars (matches `@db.VarChar(128)`).
+  - `name`: 1..255 chars after trim (matches column `@db.VarChar(255)` + `String` non-null). Empty string `""` → 422.
+  - `description`: null OR 0..65535 chars (`@db.Text`). Both `null` and `""` accepted (treat as "clear the description"). Whitespace-only (e.g. `"   "`) → trim, becomes empty string → stored as empty string (not null); keep it simple, do not normalize null vs `""` here.
+  - `author`: 1..128 chars after trim (matches `@db.VarChar(128)`). Empty string `""` → 422.
 - Response 200: full updated node (`name`, `description`, `author`, `admin_locked_name`, `admin_locked_description`, `admin_locked_author`, `status`, `updated_at`).
 - 401 / 403 from auth.
 - 404: no node with that owner/repo.
@@ -164,6 +164,8 @@ New page `web/app/admin/nodes/[owner]/[repo]/page.tsx` (server component) plus `
 │ skipped_locked: 3  updated_nodes: 0     │
 └─────────────────────────────────────────┘
 ```
+
+Data source for the history card: use the existing `web/lib/scan-runs.ts` `getLatestScanRun('sync_manager_catalog')` (already filters `status='ok'`, returns null when no row). The page renders the row's `counts.skipped_locked` and `counts.updated_nodes`. When `getLatestScanRun` returns `null` (no sync has ever succeeded — rare on production, possible on fresh dev DB), the card renders fallback text: "暂无同步记录 — 上次同步失败 / 尚未执行". No new helper needed; do not invent a separate "any-status" query for this UI.
 
 **Lock badge**: `<Badge kind="warning">已锁定</Badge>`. `Badge` component already supports `warning` (amber/yellow) — does not collide with `success` (green, used by `LastSyncedAt`) or `danger` (red). Only rendered when `admin_locked_*` is `true`.
 
