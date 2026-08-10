@@ -93,7 +93,11 @@ Notes:
 - `IF(cond, then, else)` evaluates as expected: when flag is set, the field stays as its current DB value; when flag is unset, the COALESCE rule from before applies unchanged.
 - `source_manager = true` is set unconditionally — provenance flag records "Manager sync has seen this node" even when no field was actually written. Useful for later audits and matches prior behavior.
 
-Return type changes from `None` to `int` — number of fields (0..3) actually written. 0 means all three fields were locked and the row is a no-op as far as metadata goes.
+Return type is already `int` (rows affected via `cur.rowcount`). Semantic with the new SQL:
+- `0` = WHERE matched no row, OR all `IF(...)` expressions evaluated to the current column value (no field actually changed). Treat as "this sync was a no-op as far as metadata is concerned".
+- `1` = at least one `IF(...)` expression evaluated to a different value, so the row was updated. The caller cannot tell which fields changed from this signal alone, but the caller only needs the 0/≥1 split (see next bullet).
+
+Caller uses the **binary 0 vs ≥1** semantic — `0` → `summary["skipped_locked"] += 1`, `≥1` → `summary["updated_nodes"] += 1`. No before/after SELECT needed; `cur.rowcount` is sufficient because MySQL 8.0 returns 0 when none of the assigned columns produced a different value.
 
 `scanner/tasks/sync_manager_catalog.py` caller:
 
@@ -106,6 +110,8 @@ else:
 ```
 
 `summary` JSON adds `skipped_locked: int` (default 0). `counts` is `Json?`, so adding a key is backward-compatible — `sync_manager_catalog` already initializes this dict explicitly.
+
+Note: `update_node_from_manager` already returns `int` (`cur.rowcount`). Only the *meaning* of 0 changes with the new SQL — previously 0 meant "no row matched"; now it can also mean "row matched but every field was either locked or assigned its current value". Caller-side logic is unchanged: 0 → `skipped_locked`, ≥1 → `updated_nodes`.
 
 ## Admin PATCH endpoint
 
